@@ -21,7 +21,7 @@ This repo is a fork of `hyzhak/pi-camera-in-docker`, with the goal of making the
   * **Picamera2**
   * **libcamera**
   * Raspberry Pi OS Bookworm compatible packages
-* Runs on Raspberry Pi 4/5 (ARM64) with CSI camera enabled
+* Runs on Raspberry Pi 3/4/5 (ARM64) with CSI camera enabled
 * Exposes an HTTP endpoint that provides camera streaming / frames
 * Includes docker-compose examples for use on a remote host
 
@@ -62,7 +62,7 @@ MotionInOcean solves this by building a container that installs and runs Picamer
 MotionInOcean uses:
 
 * `/run/udev:/run/udev:ro` mounted into the container
-* `privileged: true` by default for broad hardware/device access
+* Explicit device mappings (e.g., `/dev/dma_heap`, `/dev/video*`, `/dev/vchiq`) are used for hardware/device access.
 
 These settings prioritize **reliability** over strict security hardening, which is reasonable for a homelab VLAN, but should not be exposed to the public internet.
 
@@ -107,13 +107,23 @@ services:
     ports:
       - "8000:8000"
 
+    devices:
+      # These device mappings are for camera access.
+      # The /dev/video* paths might change across reboots or different RPi models.
+      # /dev/dma_heap is essential for libcamera, used by picamera2 on modern Raspberry Pi OS.
+      - /dev/dma_heap
+      - /dev/vchiq
+      - /dev/video0
+      - /dev/video10
+      - /dev/video11
+      - /dev/video12
+
     environment:
       - TZ=Europe/London
+      - EDGE_DETECTION=false # Set to 'true' to enable Canny edge detection
 
     volumes:
       - /run/udev:/run/udev:ro
-
-    privileged: true
 
     logging:
       driver: json-file
@@ -241,14 +251,13 @@ Areas an AI agent can tackle:
 
 ### Security
 
-* Replace privileged with explicit device mappings
 * Document minimal required permissions
 * Add “LAN-only” binding examples
 
 ### Performance
 
 * configurable resolution / fps
-* reduce CPU usage
+* reduce CPU usage (Implemented via `pre_callback` for edge detection)
 * reduce latency
 * optional hardware encoding support
 
@@ -277,5 +286,6 @@ docker compose ps
 docker compose logs -f
 docker exec -it motioninocean bash
 ls -l /dev/video*
+ls -l /dev/dma_heap
 ```
 

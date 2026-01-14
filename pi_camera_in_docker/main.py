@@ -11,6 +11,7 @@ from flask import Flask, Response, render_template
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
+from picamera2.array import MappedArray
 
 # Get configuration from environment variables
 resolution_str = os.environ.get("RESOLUTION", "640x480")
@@ -26,22 +27,23 @@ except ValueError:
 # Parse edge detection flag
 edge_detection = edge_detection_str.lower() in ('true', '1', 't')
 
+def apply_edge_detection(request):
+    with MappedArray(request, "main") as m:
+        # Convert to grayscale
+        grey = cv2.cvtColor(m.array, cv2.COLOR_BGR2GRAY)
+        # Apply Canny edge detection
+        edges = cv2.Canny(grey, 100, 200)
+        # Convert back to BGR so it can be encoded as JPEG
+        edges_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        # Copy the result back to the mapped array
+        np.copyto(m.array, edges_bgr)
+
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
         self.frame = None
         self.condition = Condition()
 
     def write(self, buf):
-        if edge_detection:
-            # Convert the image buffer to a numpy array
-            img_array = np.frombuffer(buf, dtype=np.uint8)
-            # Decode the image array into an image
-            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-            # Apply edge detection
-            edges = cv2.Canny(img, 100, 200)
-            # Encode the result back to JPEG
-            _, buf = cv2.imencode('.jpg', edges)
-            buf = buf.tobytes()
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
@@ -70,16 +72,22 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    picam2 = Picamera2()
-    picam2.configure(picam2.create_video_configuration(main={"size": resolution}))
-    
-    # Start recording
-    picam2.start_recording(JpegEncoder(), FileOutput(output))
-
+    picam2 = None
     try:
+        picam2 = Picamera2()
+        # Configure for BGR format for opencv
+        video_config = picam2.create_video_configuration(main={"size": resolution, "format": "BGR888"})
+        picam2.configure(video_config)
+
+        if edge_detection:
+            picam2.pre_callback = apply_edge_detection
+        
+        # Start recording
+        picam2.start_recording(JpegEncoder(), FileOutput(output))
+
         # Start the Flask app
         app.run(host='0.0.0.0', port=8000, threaded=True)
     finally:
         # Stop recording safely
-        if picam2.started:
+        if picam2 and picam2.started:
             picam2.stop_recording()

@@ -1,4 +1,5 @@
 # ---- Builder Stage ----
+# This stage is responsible for adding the Raspberry Pi repository and its keys.
 FROM debian:bookworm AS builder
 
 # Install dependencies needed for fetching RPi packages
@@ -12,16 +13,9 @@ RUN curl -Lfs https://archive.raspberrypi.org/debian/raspberrypi.gpg.key -o /tmp
     echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg] http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspi.list && \
     rm /tmp/raspberrypi.gpg.key
 
-# Install python dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        python3-picamera2 \
-        python3-opencv \
-        python3-flask && \
-    rm -rf /var/lib/apt/lists/*
-
 # ---- Final Stage ----
-FROM debian:bookworm
+# The final image is based on debian:bookworm-slim to reduce size.
+FROM debian:bookworm-slim
 
 # Copy Raspberry Pi repository and keys from builder
 COPY --from=builder /usr/share/keyrings/raspberrypi.gpg /usr/share/keyrings/raspberrypi.gpg
@@ -41,7 +35,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy the application code
-COPY pi_camera_in_docker /app/pi_camera_in_docker
+COPY pi_camera_in_docker /app
 
 # Set the entry point
-CMD ["python3", "/app/pi_camera_in_docker/main.py"]
+CMD ["python3", "/app/main.py"]

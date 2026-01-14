@@ -8,6 +8,10 @@ services:
     ports:
       - "8000:8000"
     devices:
+      # These device mappings are for camera access.
+      # The /dev/video* paths might change across reboots or different RPi models.
+      # /dev/dma_heap is essential for libcamera, used by picamera2 on modern Raspberry Pi OS.
+      - /dev/dma_heap
       - /dev/vchiq
       - /dev/video0
       - /dev/video10
