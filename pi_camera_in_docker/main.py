@@ -28,7 +28,7 @@ PAGE = """\
 </head>
 <body>
 <h1>Picamera2 MJPEG Streaming Demo</h1>
-<img src="{{ url_for('video_feed') }}" width="{width}" height="{height}" />
+<img src=\"{{ url_for('video_feed') }}\" width=\"{width}\" height=\"{height}\" />
 </body>
 </html>
 """.format(width=resolution[0], height=resolution[1])
@@ -77,12 +77,11 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    # picam2 = Picamera2()
-    # picam2.configure(picam2.create_video_configuration(main={"size": resolution}))
-    # picam2.start_recording(JpegEncoder(), FileOutput(output))
+    picam2 = Picamera2()
+    picam2.configure(picam2.create_video_configuration(main={"size": resolution}))
+    picam2.start_recording(JpegEncoder(), FileOutput(output))
 
     try:
         app.run(host='0.0.0.0', port=8000, threaded=True)
     finally:
-        # picam2.stop_recording()
-        pass
+        picam2.stop_recording()
