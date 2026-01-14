@@ -1,37 +1,30 @@
 #!/usr/bin/python3
 
-import argparse
+import os
 import cv2
 import io
 import logging
 import numpy as np
 from threading import Condition
-from flask import Flask, Response, render_template_string
+from flask import Flask, Response, render_template
 
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 
-# Parse command line arguments
-parser = argparse.ArgumentParser(description="Picamera2 MJPEG streaming demo with options")
-parser.add_argument("--resolution", type=str, help="Video resolution in WIDTHxHEIGHT format (default: 640x480)", default="640x480")
-parser.add_argument("--edge_detection", action="store_true", help="Enable edge detection")
-args = parser.parse_args()
+# Get configuration from environment variables
+resolution_str = os.environ.get("RESOLUTION", "640x480")
+edge_detection_str = os.environ.get("EDGE_DETECTION", "false")
 
 # Parse resolution
-resolution = tuple(map(int, args.resolution.split('x')))
+try:
+    resolution = tuple(map(int, resolution_str.split('x')))
+except ValueError:
+    logging.warning("Invalid RESOLUTION format. Using default 640x480.")
+    resolution = (640, 480)
 
-PAGE = """\
-<html>
-<head>
-<title>picamera2 MJPEG streaming demo</title>
-</head>
-<body>
-<h1>Picamera2 MJPEG Streaming Demo</h1>
-<img src=\"{{ url_for('video_feed') }}\" width=\"{width}\" height=\"{height}\" />
-</body>
-</html>
-""".format(width=resolution[0], height=resolution[1])
+# Parse edge detection flag
+edge_detection = edge_detection_str.lower() in ('true', '1', 't')
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
@@ -39,7 +32,7 @@ class StreamingOutput(io.BufferedIOBase):
         self.condition = Condition()
 
     def write(self, buf):
-        if args.edge_detection:
+        if edge_detection:
             # Convert the image buffer to a numpy array
             img_array = np.frombuffer(buf, dtype=np.uint8)
             # Decode the image array into an image
@@ -58,7 +51,7 @@ output = StreamingOutput()
 
 @app.route('/')
 def index():
-    return render_template_string(PAGE)
+    return render_template("index.html", width=resolution[0], height=resolution[1])
 
 def gen():
     try:
@@ -79,9 +72,14 @@ def video_feed():
 if __name__ == '__main__':
     picam2 = Picamera2()
     picam2.configure(picam2.create_video_configuration(main={"size": resolution}))
+    
+    # Start recording
     picam2.start_recording(JpegEncoder(), FileOutput(output))
 
     try:
+        # Start the Flask app
         app.run(host='0.0.0.0', port=8000, threaded=True)
     finally:
-        picam2.stop_recording()
+        # Stop recording safely
+        if picam2.started:
+            picam2.stop_recording()

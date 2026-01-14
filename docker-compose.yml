@@ -1,16 +1,25 @@
 version: '3.8'
 
 services:
-  camera:
+  motioninocean:
     image: ghcr.io/CyanAutomation/MotionInOcean:latest
-    volumes:
-      - /run/udev:/run/udev:ro
+    container_name: motioninocean
+    restart: unless-stopped
     ports:
       - "8000:8000"
-    restart: unless-stopped
     devices:
-      - /dev/vchiq:/dev/vchiq
-      - /dev/video0:/dev/video0
-      - /dev/video10:/dev/video10
-      - /dev/video11:/dev/video11
-      - /dev/video12:/dev/video12
+      - /dev/vchiq
+      - /dev/video0
+      - /dev/video10
+      - /dev/video11
+      - /dev/video12
+    volumes:
+      - /run/udev:/run/udev:ro
+    environment:
+      - RESOLUTION=1280x720
+      - EDGE_DETECTION=false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
