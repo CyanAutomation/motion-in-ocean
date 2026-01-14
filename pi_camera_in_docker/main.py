@@ -77,11 +77,12 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    picam2 = Picamera2()
-    picam2.configure(picam2.create_video_configuration(main={"size": resolution}))
-    picam2.start_recording(JpegEncoder(), FileOutput(output))
+    # picam2 = Picamera2()
+    # picam2.configure(picam2.create_video_configuration(main={"size": resolution}))
+    # picam2.start_recording(JpegEncoder(), FileOutput(output))
 
     try:
         app.run(host='0.0.0.0', port=8000, threaded=True)
     finally:
-        picam2.stop_recording()
+        # picam2.stop_recording()
+        pass
