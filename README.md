@@ -49,11 +49,13 @@ MotionInOcean solves this by building a container that installs and runs Picamer
 
 ---
 
-## Technology Stack Verification (2026)
+### Technology Stack Verification (2026)
 
 This project uses the **official and current** Raspberry Pi camera stack:
 
 - **libcamera** - Official camera subsystem (Bookworm standard since 2022)
+- **python3-libcamera** - Python bindings for libcamera
+- **libcap-dev** - Development headers for libcap (required for python-prctl)
 - **Picamera2** - Official Python library maintained by Raspberry Pi Foundation
 - **Debian Bookworm** - Latest stable Raspberry Pi OS base (ARM64)
 - **Python 3.11+** - Modern Python with proper async and type support
@@ -127,6 +129,23 @@ rpicam-hello
 
 (or another libcamera test tool available on your OS).
 
+### Local Development (Non-Raspberry Pi)
+
+For development or testing on a non-Raspberry Pi machine (e.g., an `amd64` workstation), the camera and display-related functionalities of `picamera2` will not work due to hardware dependencies.
+
+To run the application's web server and other logic without a physical camera:
+
+1.  Set the `MOCK_CAMERA` environment variable to `true` in your `.env` file (or directly in `docker-compose.yml` for local testing).
+2.  The application will then simulate camera frames and stream a dummy image.
+
+Example `.env` entry:
+
+```
+MOCK_CAMERA=true
+```
+
+This allows you to verify the application's Flask server, API endpoints (`/health`, `/ready`), and overall structure, but not the actual camera feed or edge detection on real camera data.
+
 ---
 
 ## Deployment (recommended)
@@ -164,6 +183,7 @@ EOF
 * `FPS` - Frame rate limit. `0` uses camera default. Maximum recommended: `120`.
 * `EDGE_DETECTION` - Set to `true` to enable Canny edge detection (adds CPU overhead).
 * `TZ` - Timezone for logging timestamps (e.g., `America/New_York`, `Asia/Tokyo`).
+* `MOCK_CAMERA` - Set to `true` to disable Picamera2 initialization and generate dummy frames. Useful for development and testing on non-Raspberry Pi systems or when no camera is attached.
 
 ### docker-compose.yml example
 
@@ -171,22 +191,28 @@ EOF
 services:
   motioninocean:
     image: ghcr.io/<your-org-or-user>/motioninocean:latest
+    build: . # Build from local Dockerfile for custom configurations or local development
+    platform: linux/arm64 # Specify target platform for Raspberry Pi
     container_name: motioninocean
     restart: unless-stopped
 
     ports:
-      - "8000:8000"  # Accessible on all network interfaces
+      - "127.0.0.1:8000:8000"  # Accessible only on localhost for security
 
     devices:
       # These device mappings are for camera access.
       # The /dev/video* paths might change across reboots or different RPi models.
       # /dev/dma_heap is essential for libcamera, used by picamera2 on modern Raspberry Pi OS.
-      - /dev/dma_heap
-      - /dev/vchiq
-      - /dev/video0
-      - /dev/video10
-      - /dev/video11
-      - /dev/video12
+      - /dev/dma_heap:/dev/dma_heap
+      - /dev/vchiq:/dev/vchiq
+      - /dev/video0:/dev/video0
+      - /dev/video10:/dev/video10
+      - /dev/video11:/dev/video11
+      - /dev/video12:/dev/video12
+      - /dev/video13:/dev/video13
+      - /dev/video14:/dev/video14
+      - /dev/video15:/dev/video15
+      - /dev/video16:/dev/video16
 
     env_file:
       - .env  # See .env.example for configuration options
