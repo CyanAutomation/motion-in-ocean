@@ -1,7 +1,6 @@
 services:
   motioninocean:
-    image: ghcr.io/cyanautomation/motioninocean:latest
-    platform: linux/arm64
+    build: .
     restart: unless-stopped
     container_name: motioninocean
 
@@ -18,17 +17,17 @@ services:
     # - /dev/dma_heap: Required for libcamera memory management on modern Pi OS
     # - /dev/vchiq: Required for camera ISP on Raspberry Pi
     # - /dev/video*: Camera device nodes (indices may vary by Pi model)
-    devices:
-      - /dev/dma_heap:/dev/dma_heap
-      - /dev/vchiq:/dev/vchiq
-      - /dev/video0:/dev/video0
-      - /dev/video10:/dev/video10
-      - /dev/video11:/dev/video11
-      - /dev/video12:/dev/video12
-      - /dev/video13:/dev/video13
-      - /dev/video14:/dev/video14
-      - /dev/video15:/dev/video15
-      - /dev/video16:/dev/video16
+    # devices:
+    #   - /dev/dma_heap:/dev/dma_heap
+    #   - /dev/vchiq:/dev/vchiq
+    #   - /dev/video0:/dev/video0
+    #   - /dev/video10:/dev/video10
+    #   - /dev/video11:/dev/video11
+    #   - /dev/video12:/dev/video13
+    #   - /dev/video13:/dev/video13
+    #   - /dev/video14:/dev/video14
+    #   - /dev/video15:/dev/video15
+    #   - /dev/video16:/dev/video16
 
     # Fallback to privileged mode if explicit device access is insufficient
     # Uncomment the line below if device mappings don't work on your hardware
@@ -39,15 +38,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-        reservations:
-          memory: 256M
-          cpus: '0.5'
 
     logging:
       driver: json-file

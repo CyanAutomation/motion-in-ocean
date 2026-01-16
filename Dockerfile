@@ -29,7 +29,10 @@ RUN apt-get update && \
         python3-pip \
         curl \
         gcc \
-        python3-dev && \
+        python3-dev \
+        libcap-dev \
+        libcamera-dev \
+        python3-libcamera && \
     pip3 install --break-system-packages picamera2 && \
     apt-get clean && \
     apt-get autoremove -y && \
