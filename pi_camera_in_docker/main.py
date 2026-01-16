@@ -4,56 +4,133 @@ import os
 import cv2
 import io
 import logging
+import json
+import time
 import numpy as np
 from threading import Condition
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template, jsonify
+from datetime import datetime
 
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 from picamera2.array import MappedArray
 
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Get configuration from environment variables
 resolution_str = os.environ.get("RESOLUTION", "640x480")
 edge_detection_str = os.environ.get("EDGE_DETECTION", "false")
+fps_str = os.environ.get("FPS", "0")  # 0 = use camera default
 
 # Parse resolution
 try:
     resolution = tuple(map(int, resolution_str.split('x')))
+    logger.info(f"Camera resolution set to {resolution}")
 except ValueError:
-    logging.warning("Invalid RESOLUTION format. Using default 640x480.")
+    logger.warning("Invalid RESOLUTION format. Using default 640x480.")
     resolution = (640, 480)
 
 # Parse edge detection flag
 edge_detection = edge_detection_str.lower() in ('true', '1', 't')
+logger.info(f"Edge detection: {edge_detection}")
+
+# Parse FPS
+try:
+    fps = int(fps_str)
+    logger.info(f"Frame rate limited to {fps} FPS" if fps > 0 else "Using camera default FPS")
+except ValueError:
+    logger.warning("Invalid FPS format. Using camera default.")
+    fps = 0
 
 def apply_edge_detection(request):
-    with MappedArray(request, "main") as m:
-        # Convert to grayscale
-        grey = cv2.cvtColor(m.array, cv2.COLOR_BGR2GRAY)
-        # Apply Canny edge detection
-        edges = cv2.Canny(grey, 100, 200)
-        # Convert back to BGR so it can be encoded as JPEG
-        edges_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        # Copy the result back to the mapped array
-        np.copyto(m.array, edges_bgr)
+    try:
+        with MappedArray(request, "main") as m:
+            # Convert to grayscale
+            grey = cv2.cvtColor(m.array, cv2.COLOR_BGR2GRAY)
+            # Apply Canny edge detection
+            edges = cv2.Canny(grey, 100, 200)
+            # Convert back to BGR so it can be encoded as JPEG
+            edges_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+            # Copy the result back to the mapped array
+            np.copyto(m.array, edges_bgr)
+    except Exception as e:
+        logger.error(f"Edge detection processing failed: {e}", exc_info=True)
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
         self.frame = None
         self.condition = Condition()
+        self.frame_count = 0
+        self.last_frame_time = time.time()
+        self.frame_times = []
 
     def write(self, buf):
         with self.condition:
             self.frame = buf
+            self.frame_count += 1
+            # Track frame timing for FPS calculation
+            now = time.time()
+            self.frame_times.append(now)
+            # Keep only last 30 frames for rolling FPS calculation
+            if len(self.frame_times) > 30:
+                self.frame_times.pop(0)
             self.condition.notify_all()
+
+    def get_fps(self):
+        """Calculate actual FPS from frame times"""
+        if len(self.frame_times) < 2:
+            return 0.0
+        time_span = self.frame_times[-1] - self.frame_times[0]
+        if time_span == 0:
+            return 0.0
+        return (len(self.frame_times) - 1) / time_span
+
+    def get_status(self):
+        """Return current streaming status"""
+        return {
+            "frames_captured": self.frame_count,
+            "current_fps": round(self.get_fps(), 2),
+            "resolution": resolution,
+            "edge_detection": edge_detection
+        }
 
 app = Flask(__name__)
 output = StreamingOutput()
+app.start_time = datetime.now()
+picam2_instance = None
 
 @app.route('/')
 def index():
     return render_template("index.html", width=resolution[0], height=resolution[1])
+
+@app.route('/health')
+def health():
+    """Health check endpoint - returns 200 if service is running"""
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
+
+@app.route('/ready')
+def ready():
+    """Readiness probe - checks if camera is actually streaming"""
+    global picam2_instance
+    if picam2_instance is None or not picam2_instance.started:
+        return jsonify({
+            "status": "not_ready",
+            "reason": "Camera not initialized or not started",
+            "timestamp": datetime.now().isoformat()
+        }), 503
+    
+    return jsonify({
+        "status": "ready",
+        "timestamp": datetime.now().isoformat(),
+        "uptime_seconds": (datetime.now() - app.start_time).total_seconds(),
+        **output.get_status()
+    }), 200
 
 def gen():
     try:
@@ -64,7 +141,7 @@ def gen():
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
     except Exception as e:
-        logging.warning('Removed streaming client: %s', str(e))
+        logger.warning(f'Streaming client disconnected: {e}')
 
 @app.route('/stream.mjpg')
 def video_feed():
@@ -72,22 +149,50 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    picam2 = None
+    picam2_instance = None
     try:
-        picam2 = Picamera2()
+        logger.info("Initializing Picamera2...")
+        picam2_instance = Picamera2()
+        
+        logger.info(f"Configuring video: resolution={resolution}, format=BGR888")
         # Configure for BGR format for opencv
-        video_config = picam2.create_video_configuration(main={"size": resolution, "format": "BGR888"})
-        picam2.configure(video_config)
+        video_config = picam2_instance.create_video_configuration(
+            main={"size": resolution, "format": "BGR888"}
+        )
+        picam2_instance.configure(video_config)
 
         if edge_detection:
-            picam2.pre_callback = apply_edge_detection
+            logger.info("Enabling edge detection preprocessing")
+            picam2_instance.pre_callback = apply_edge_detection
         
+        logger.info("Starting camera recording...")
         # Start recording
-        picam2.start_recording(JpegEncoder(), FileOutput(output))
+        picam2_instance.start_recording(JpegEncoder(), FileOutput(output))
+        logger.info("Camera recording started successfully")
 
         # Start the Flask app
+        logger.info("Starting Flask server on 0.0.0.0:8000")
         app.run(host='0.0.0.0', port=8000, threaded=True)
+        
+    except PermissionError as e:
+        logger.error(f"Permission denied accessing camera device: {e}")
+        logger.error("Ensure the container has proper device access (--device mappings or --privileged)")
+        raise
+    except RuntimeError as e:
+        logger.error(f"Camera initialization failed: {e}")
+        logger.error("Verify camera is enabled on the host and working (rpicam-hello test)")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during initialization: {e}", exc_info=True)
+        raise
     finally:
         # Stop recording safely
-        if picam2 and picam2.started:
-            picam2.stop_recording()
+        if picam2_instance is not None:
+            try:
+                if picam2_instance.started:
+                    logger.info("Stopping camera recording...")
+                    picam2_instance.stop_recording()
+                    logger.info("Camera recording stopped")
+            except Exception as e:
+                logger.error(f"Error during camera shutdown: {e}", exc_info=True)
+        logger.info("Application shutdown complete")
