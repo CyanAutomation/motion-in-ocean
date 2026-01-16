@@ -1,0 +1,38 @@
+# Git and version control
+.git/
+.gitignore
+.github/
+
+# Test files
+test_*.py
+TEST_REPORT.md
+TESTING_COMPLETE.md
+
+# Documentation
+*.md
+!README.md
+
+# Environment files (should be provided at runtime)
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.log

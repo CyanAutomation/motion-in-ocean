@@ -7,6 +7,7 @@ import logging
 import json
 import time
 import numpy as np
+from collections import deque
 from threading import Condition
 from flask import Flask, Response, render_template, jsonify
 from datetime import datetime
@@ -28,6 +29,7 @@ resolution_str = os.environ.get("RESOLUTION", "640x480")
 edge_detection_str = os.environ.get("EDGE_DETECTION", "false")
 fps_str = os.environ.get("FPS", "0")  # 0 = use camera default
 mock_camera_str = os.environ.get("MOCK_CAMERA", "false")
+jpeg_quality_str = os.environ.get("JPEG_QUALITY", "80")
 
 mock_camera = mock_camera_str.lower() in ('true', '1', 't')
 logger.info(f"Mock camera enabled: {mock_camera}")
@@ -68,6 +70,19 @@ except (ValueError, TypeError):
     logger.warning("Invalid FPS format. Using camera default.")
     fps = 0
 
+# Parse JPEG quality
+try:
+    jpeg_quality = int(jpeg_quality_str)
+    # Validate JPEG quality value
+    if jpeg_quality < 1 or jpeg_quality > 100:
+        logger.warning(f"JPEG_QUALITY {jpeg_quality} out of range (1-100). Using default 80.")
+        jpeg_quality = 80
+    else:
+        logger.info(f"JPEG quality set to {jpeg_quality}")
+except (ValueError, TypeError):
+    logger.warning("Invalid JPEG_QUALITY format. Using default 80.")
+    jpeg_quality = 80
+
 def apply_edge_detection(request):
     try:
         with MappedArray(request, "main") as m:
@@ -88,7 +103,7 @@ class StreamingOutput(io.BufferedIOBase):
         self.condition = Condition()
         self.frame_count = 0
         self.last_frame_time = time.time()
-        self.frame_times = []
+        self.frame_times = deque(maxlen=30)  # Fixed-size deque prevents memory leak
 
     def write(self, buf):
         with self.condition:
@@ -96,10 +111,7 @@ class StreamingOutput(io.BufferedIOBase):
             self.frame_count += 1
             # Track frame timing for FPS calculation
             now = time.time()
-            self.frame_times.append(now)
-            # Keep only last 30 frames for rolling FPS calculation
-            if len(self.frame_times) > 30:
-                self.frame_times.pop(0)
+            self.frame_times.append(now)  # deque automatically maintains maxlen=30
             self.condition.notify_all()
 
     def get_fps(self):
@@ -124,6 +136,7 @@ app = Flask(__name__)
 output = StreamingOutput()
 app.start_time = datetime.now()
 picam2_instance = None
+recording_started = False  # Track if camera recording has actually started
 
 @app.route('/')
 def index():
@@ -137,17 +150,12 @@ def health():
 @app.route('/ready')
 def ready():
     """Readiness probe - checks if camera is actually streaming"""
-    global picam2_instance
-    try:
-        is_started = picam2_instance is not None and hasattr(picam2_instance, 'started') and picam2_instance.started
-    except (AttributeError, Exception) as e:
-        logger.warning(f"Error checking camera status: {e}")
-        is_started = False
+    global recording_started
     
-    if not is_started:
+    if not recording_started:
         return jsonify({
             "status": "not_ready",
-            "reason": "Camera not initialized or not started",
+            "reason": "Camera not initialized or recording not started",
             "timestamp": datetime.now().isoformat()
         }), 503
     
@@ -184,6 +192,8 @@ if __name__ == '__main__':
 
         # Simulate camera streaming for the StreamingOutput
         def generate_mock_frames():
+            global recording_started
+            recording_started = True  # Mark as started for mock mode
             while True:
                 time.sleep(1 / (fps if fps > 0 else 10)) # Simulate FPS
                 output.write(dummy_image_jpeg)
@@ -217,9 +227,13 @@ if __name__ == '__main__':
                 picam2_instance.pre_callback = apply_edge_detection
             
             logger.info("Starting camera recording...")
-            # Start recording
-            picam2_instance.start_recording(JpegEncoder(), FileOutput(output))
-            logger.info("Camera recording started successfully")
+            # Start recording with configured JPEG quality
+            picam2_instance.start_recording(JpegEncoder(q=jpeg_quality), FileOutput(output))
+            
+            # Mark recording as started only after start_recording succeeds
+            global recording_started
+            recording_started = True
+            logger.info(f"Camera recording started successfully (JPEG quality: {jpeg_quality})")
 
             # Start the Flask app
             logger.info("Starting Flask server on 0.0.0.0:8000")
