@@ -305,32 +305,33 @@ git push origin v1.0.0
 
 ## Suggested improvements backlog
 
-Areas an AI agent can tackle:
+Areas for future enhancements:
 
-### Reliability / Operations
+### ✅ Completed
 
-* Improve startup logs and error output
-* Add health endpoint (`/health`)
-* Add structured logging
-* Better config via env vars
+* ✅ Add health endpoint (`/health` and `/ready`)
+* ✅ Add structured logging  
+* ✅ Better config via env vars with validation
+* ✅ Configurable resolution and FPS
+* ✅ Document minimal required permissions
+* ✅ Add resource limits for Raspberry Pi deployment
+* ✅ Reduce CPU usage via `pre_callback` for edge detection
 
-### Security
+### 🔄 Future Work
 
-* Document minimal required permissions
-* Add “LAN-only” binding examples
+#### Performance
 
-### Performance
+* Optional hardware encoding support (H.264/H.265)
+* Reduce latency for real-time applications
+* Multi-camera support (CAMERA_INDEX env var)
 
-* configurable resolution / fps
-* reduce CPU usage (Implemented via `pre_callback` for edge detection)
-* reduce latency
-* optional hardware encoding support
+#### Usability
 
-### Usability
-
-* provide “OctoPrint consumption” example
-* provide “Home Assistant camera integration” example
-* provide Homepage + Uptime Kuma config snippets
+* Provide "OctoPrint consumption" example
+* Provide "Home Assistant camera integration" example
+* Provide Homepage + Uptime Kuma config snippets
+* Add Prometheus metrics export for monitoring
+* Add basic authentication option
 
 ---
 
