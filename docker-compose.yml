@@ -2,7 +2,7 @@
 
 services:
   motion-in-ocean:
-    image: ghcr.io/cyanautomation/motion-in-ocean:${MOTION_IN_OCEAN_IMAGE_TAG}
+    image: ghcr.io/cyanautomation/motioninocean:${MOTION_IN_OCEAN_IMAGE_TAG}
     container_name: motion-in-ocean
     platform: linux/arm64
     restart: unless-stopped
