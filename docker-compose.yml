@@ -20,6 +20,7 @@ services:
     # - /dev/dma_heap/*: Required for libcamera memory management on modern Pi OS (directory with subdirectories)
     # - /dev/vchiq: Required for camera ISP on Raspberry Pi
     # - /dev/video*: Camera device nodes (indices vary significantly by Pi model)
+    # - /dev/v4l-subdev*: V4L2 sub-devices (required for camera sensor control on unicam driver)
     # - /dev/media*: Media controller devices (required for libcamera camera enumeration)
     #
     # IMPORTANT: Run ./detect-devices.sh to identify which devices exist on your system
@@ -28,7 +29,7 @@ services:
     device_cgroup_rules:
       - 'c 253:* rmw'  # /dev/dma_heap/* (char device 253)
       - 'c 511:* rmw'  # /dev/vchiq
-      - 'c 81:* rmw'   # /dev/video* devices (all indices automatically)
+      - 'c 81:* rmw'   # /dev/video* and /dev/v4l-subdev* devices (all indices automatically)
       - 'c 250:* rmw'  # /dev/media* devices (media controllers for libcamera)
     
     devices:
@@ -39,6 +40,8 @@ services:
       - /dev/media1:/dev/media1
       - /dev/media2:/dev/media2
       - /dev/media3:/dev/media3
+      # V4L2 sub-device (required for camera sensor control on unicam/Pi 3A)
+      - /dev/v4l-subdev0:/dev/v4l-subdev0
       # Video devices (camera nodes) - device indices vary by Pi model
       # Raspberry Pi 3A typically uses: video0, 10-16, 18, 20-23, 31
       - /dev/video0:/dev/video0
