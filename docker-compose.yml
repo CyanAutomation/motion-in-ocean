@@ -27,21 +27,25 @@ services:
       - 'c 253:* rmw'  # /dev/dma_heap/* (char device 253)
       - 'c 511:* rmw'  # /dev/vchiq
       - 'c 81:* rmw'   # /dev/video* devices
+      - 'c 250:* rmw'  # /dev/media* devices (media controllers for libcamera)
     
     devices:
       - /dev/dma_heap:/dev/dma_heap  # Mount entire directory
       - /dev/vchiq:/dev/vchiq
-    
-    # Optional: Uncomment video devices that exist on your system
-    # Run: ls -l /dev/video* to see available devices
-    #   - /dev/video0:/dev/video0
-    #   - /dev/video10:/dev/video10
-    #   - /dev/video11:/dev/video11
-    #   - /dev/video12:/dev/video12
-    #   - /dev/video13:/dev/video13
-    #   - /dev/video14:/dev/video14
-    #   - /dev/video15:/dev/video15
-    #   - /dev/video16:/dev/video16
+      # Media controller devices (required for libcamera camera enumeration)
+      - /dev/media0:/dev/media0
+      - /dev/media1:/dev/media1
+      - /dev/media2:/dev/media2
+      - /dev/media3:/dev/media3
+      # Video devices (camera nodes) - enabled for Raspberry Pi 3A
+      - /dev/video0:/dev/video0
+      - /dev/video10:/dev/video10
+      - /dev/video11:/dev/video11
+      - /dev/video12:/dev/video12
+      - /dev/video13:/dev/video13
+      - /dev/video14:/dev/video14
+      - /dev/video15:/dev/video15
+      - /dev/video16:/dev/video16
 
     # Fallback to privileged mode if explicit device access is insufficient
     # Uncomment the line below if device mappings don't work on your hardware
