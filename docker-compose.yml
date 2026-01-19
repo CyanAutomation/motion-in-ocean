@@ -68,7 +68,88 @@ services:
     # privileged: true
 
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:8000/ready || exit 1"]
+      # Motion In Ocean Docker Compose Configuration
+
+services:
+  motion-in-ocean:
+    image: ghcr.io/cyanautomation/motioninocean:${MOTION_IN_OCEAN_IMAGE_TAG}
+    container_name: motion-in-ocean
+    platform: linux/arm64
+    restart: unless-stopped
+    env_file: ./.env
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "0.0.0.0:${MOTION_IN_OCEAN_PORT}:8000"  # Accessible from network (use firewall/VPN for production)
+    environment:
+      - TZ=${TZ}
+      - RESOLUTION=${MOTION_IN_OCEAN_RESOLUTION}
+      - FPS=${MOTION_IN_OCEAN_FPS}
+      - EDGE_DETECTION=${MOTION_IN_OCEAN_EDGE_DETECTION}
+      - JPEG_QUALITY=${MOTION_IN_OCEAN_JPEG_QUALITY}
+    volumes:
+      - /run/udev:/run/udev:ro
+
+    # Device access for Raspberry Pi camera
+    # - /dev/dma_heap/*: Required for libcamera memory management on modern Pi OS (directory with subdirectories)
+    # - /dev/vchiq: Required for camera ISP on Raspberry Pi
+    # - /dev/video*: Camera device nodes (indices vary significantly by Pi model)
+    # - /dev/v4l-subdev*: V4L2 sub-devices (required for camera sensor control on unicam driver)
+    # - /dev/media*: Media controller devices (required for libcamera camera enumeration)
+    #
+    # IMPORTANT: Run ./detect-devices.sh to identify which devices exist on your system
+    # Note: device_cgroup_rules below provide automatic access to entire device classes,
+    # but explicit mappings are kept for compatibility and documentation purposes.
+    device_cgroup_rules:
+      - 'c 253:* rmw'  # /dev/dma_heap/* (char device 253)
+      - 'c 511:* rmw'  # /dev/vchiq
+      - 'c 81:* rmw'   # /dev/video* and /dev/v4l-subdev* devices (all indices automatically)
+      - 'c 250:* rmw'  # /dev/media* devices (media controllers for libcamera)
+    
+    devices:
+      - /dev/dma_heap:/dev/dma_heap  # Mount entire directory
+      - /dev/vchiq:/dev/vchiq
+      # Media controller devices (required for libcamera camera enumeration)
+      - /dev/media0:/dev/media0
+      - /dev/media1:/dev/media1
+      - /dev/media2:/dev/media2
+      - /dev/media3:/dev/media3
+      # V4L2 sub-device (required for camera sensor control on unicam/Pi 3A)
+      - /dev/v4l-subdev0:/dev/v4l-subdev0
+      # Video devices (camera nodes) - device indices vary by Pi model
+      # Raspberry Pi 3A typically uses: video0, 10-16, 18, 20-23, 31
+      - /dev/video0:/dev/video0
+      - /dev/video10:/dev/video10
+      - /dev/video11:/dev/video11
+      - /dev/video12:/dev/video12
+      - /dev/video13:/dev/video13
+      - /dev/video14:/dev/video14
+      - /dev/video15:/dev/video15
+      - /dev/video16:/dev/video16
+      - /dev/video18:/dev/video18
+      - /dev/video20:/dev/video20
+      - /dev/video21:/dev/video21
+      - /dev/video22:/dev/video22
+      - /dev/video23:/dev/video23
+      - /dev/video31:/dev/video31
+
+    # Fallback to privileged mode if explicit device access is insufficient
+    # Uncomment the line below if device mappings don't work on your hardware
+    # privileged: true
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/ready || exit 1"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 1m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
       interval: 2m
       timeout: 10s
       retries: 3
