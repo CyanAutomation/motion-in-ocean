@@ -1,14 +1,81 @@
-# motion-in-ocean 🌊📷
+# motion-in-ocean 🌊📷  
+**Raspberry Pi CSI Camera Streaming in Docker (Picamera2 / libcamera)**
 
-**Raspberry Pi Camera Streaming in Docker (Picamera2 / libcamera)**
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Docker Image](https://img.shields.io/badge/GHCR-motion--in--ocean-informational)](https://github.com/<your-org-or-user>/motion-in-ocean/pkgs/container/motion-in-ocean)
+[![Build](https://img.shields.io/badge/build-GitHub_Actions-lightgrey)](#ci--cd)
+[![Status](https://img.shields.io/badge/status-alpha-orange)](#project-status)
 
-motion-in-ocean is a Docker-first project for running the **Raspberry Pi CSI camera** inside a container and streaming video across the network. It’s intended for **Raspberry Pi homelabs** and remote Docker hosts, where you want a reliable camera stream without installing a full stack directly on the host OS.
+motion-in-ocean is a **Docker-first** project for running a **Raspberry Pi CSI camera** inside a container and streaming video across the network. It’s intended for **Raspberry Pi homelabs** and remote Docker hosts, where you want a reliable camera stream without installing a full stack directly on the host OS.
 
-This repo is a fork of `hyzhak/pi-camera-in-docker`, with the goal of making the solution more polished and “homelab deployable”:
+This repo is a fork of `hyzhak/pi-camera-in-docker`, with the goal of making the solution more polished and **“homelab deployable”**:
 
-* build the image once
-* publish to GHCR
-* deploy from a `docker-compose.yml` that pulls an image tag (no local builds required)
+- build the image once
+- publish to GHCR
+- deploy from a `docker-compose.yml` that pulls an image tag (no local builds required)
+
+---
+
+## Quick Start (Recommended)
+
+> ✅ **Target:** Raspberry Pi OS (64-bit) / Debian Bookworm on ARM64  
+> ✅ **Assumption:** CSI camera enabled and working on the host  
+> ✅ **Usage:** Homelab LAN / VLAN only (do not expose directly to the internet)
+
+### 1) Create folder + config
+
+```bash
+mkdir -p ~/containers/motion-in-ocean
+cd ~/containers/motion-in-ocean
+
+curl -fsSL https://raw.githubusercontent.com/<your-org-or-user>/motion-in-ocean/main/.env.example -o .env
+nano .env
+````
+
+### 2) Create `docker-compose.yml`
+
+```yaml
+services:
+  motion-in-ocean:
+    image: ghcr.io/<your-org-or-user>/motion-in-ocean:latest
+    container_name: motion-in-ocean
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:8000:8000"  # localhost only (recommended)
+
+    devices:
+      - /dev/dma_heap:/dev/dma_heap
+      - /dev/vchiq:/dev/vchiq
+      # Add your /dev/video* and /dev/media* mappings based on your Pi hardware
+      # Tip: use ./detect-devices.sh to identify devices reliably
+
+    env_file:
+      - .env
+
+    volumes:
+      - /run/udev:/run/udev:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+```
+
+### 3) Run it
+
+```bash
+docker compose up -d
+docker logs -f motion-in-ocean
+```
+
+### 4) Check health
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
+```
 
 ---
 
@@ -23,7 +90,7 @@ This repo is a fork of `hyzhak/pi-camera-in-docker`, with the goal of making the
   * Raspberry Pi OS Bookworm compatible packages
 * Runs on Raspberry Pi 3/4/5 (ARM64) with CSI camera enabled
 * Exposes an HTTP endpoint that provides camera streaming / frames
-* Includes docker-compose examples for use on a remote host
+* Includes docker-compose examples for use on remote host deployment patterns
 
 ### ❌ What it isn’t
 
@@ -42,55 +109,61 @@ Running the Pi camera inside Docker is harder than USB webcams because the moder
 Many popular Docker camera images:
 
 * don’t ship ARM64 builds
-* or assume a traditional V4L2 webcam interface
-* or require host-installed wrappers (e.g. `libcamerify`)
+* assume a traditional V4L2 webcam interface
+* require host-installed wrappers (e.g. `libcamerify`)
 
 motion-in-ocean solves this by building a container that installs and runs Picamera2 directly on top of Bookworm-compatible Raspberry Pi repositories.
 
 ---
 
-### Technology Stack Verification (2026)
+## Project Status
 
-This project uses the **official and current** Raspberry Pi camera stack:
+This project is small and intentionally focused:
 
-- **libcamera** - Official camera subsystem (Bookworm standard since 2022)
-- **python3-libcamera** - Python bindings for libcamera
-- **libcap-dev** - Development headers for libcap (required for python-prctl)
-- **Picamera2** - Official Python library maintained by Raspberry Pi Foundation
-- **Debian Bookworm** - Latest stable Raspberry Pi OS base (ARM64)
-- **Python 3.11+** - Modern Python with proper async and type support
+* ✅ solid “homelab” deployment baseline
+* ✅ health endpoints
+* ✅ Pi camera stack aligned with Bookworm
+* 🔄 still evolving device detection, CI/CD and packaging polish
 
-### What We're NOT Using (Deprecated)
+---
 
-- ❌ **picamera (v1.x)** - Deprecated library, only works with legacy camera stack
-- ❌ **raspistill/raspivid** - Command-line tools removed in Bookworm
-- ❌ **MMAL** - Legacy Multimedia Abstraction Layer, replaced by libcamera
+## Configuration
 
-### Why This Matters
+Create/edit `.env`:
 
-The Raspberry Pi camera ecosystem changed significantly with Raspberry Pi OS Bullseye (2021) and continues in Bookworm (2023+):
-
-- **Legacy stack** (MMAL/raspistill) is no longer maintained or available
-- **Modern stack** (libcamera/picamera2) is required for Camera Module v3, HQ Camera, and future hardware
-- **Hardware ISP** acceleration only available through libcamera
-- All official Raspberry Pi documentation recommends this approach
-
-### Verification
-
-If you're unsure whether your host system uses the modern stack, check:
-
-```bash
-# Modern stack (✓ Correct)
-rpicam-hello --version   # Should work on Bookworm
-
-# Legacy stack (✗ Won't work on Bookworm)
-raspistill --help        # Command not found on Bookworm
+```env
+RESOLUTION=640x480
+FPS=30
+EDGE_DETECTION=false
+TZ=Europe/London
+MOCK_CAMERA=false
 ```
 
-**Official References:**
-- [Picamera2 Manual (PDF)](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf)
-- [Raspberry Pi Camera Software Documentation](https://www.raspberrypi.com/documentation/computers/camera_software.html)
-- [libcamera Project](https://libcamera.org/)
+### Options
+
+* `RESOLUTION` - Camera resolution (e.g., `640x480`, `1280x720`, `1920x1080`). Max `4096x4096`.
+* `FPS` - Frame rate limit. `0` uses camera default. Maximum recommended: `120`.
+* `EDGE_DETECTION` - `true` enables Canny edge detection (CPU overhead).
+* `TZ` - Logging timezone.
+* `MOCK_CAMERA` - `true` disables Picamera2 initialisation and streams dummy frames (dev/testing).
+
+---
+
+## Local Development (Non-Raspberry Pi)
+
+For development/testing on a non-Raspberry Pi machine (e.g. `amd64` workstation), camera/display functionality won’t work due to hardware dependencies.
+
+Use mock mode:
+
+```env
+MOCK_CAMERA=true
+```
+
+This allows you to validate:
+
+* Flask server
+* `/health` and `/ready`
+* routing, config, general structure
 
 ---
 
@@ -107,333 +180,152 @@ raspistill --help        # Command not found on Bookworm
 motion-in-ocean uses:
 
 * `/run/udev:/run/udev:ro` mounted into the container
-* Explicit device mappings (e.g., `/dev/dma_heap`, `/dev/video*`, `/dev/vchiq`) are used for hardware/device access.
+* Explicit device mappings (`/dev/dma_heap`, `/dev/video*`, `/dev/vchiq`, `/dev/media*`)
 
-These settings prioritize **reliability** over strict security hardening, which is reasonable for a homelab VLAN, but should not be exposed to the public internet.
-
----
-
-## Quick start
-
-### Requirements
-
-* Raspberry Pi OS (64-bit) / Debian Bookworm ARM64
-* Camera enabled and working on the host
-* Docker + Docker Compose installed
-
-Validate the host camera works before running containers, e.g.:
-
-```bash
-rpicam-hello
-```
-
-(or another libcamera test tool available on your OS).
-
-### Local Development (Non-Raspberry Pi)
-
-For development or testing on a non-Raspberry Pi machine (e.g., an `amd64` workstation), the camera and display-related functionalities of `picamera2` will not work due to hardware dependencies.
-
-To run the application's web server and other logic without a physical camera:
-
-1.  Set the `MOCK_CAMERA` environment variable to `true` in your `.env` file (or directly in `docker-compose.yml` for local testing).
-2.  The application will then simulate camera frames and stream a dummy image.
-
-Example `.env` entry:
-
-```
-MOCK_CAMERA=true
-```
-
-This allows you to verify the application's Flask server, API endpoints (`/health`, `/ready`), and overall structure, but not the actual camera feed or edge detection on real camera data.
-
----
-
-## Deployment (recommended)
-
-### Create project folder
-
-```bash
-mkdir -p ~/containers/motion-in-ocean
-cd ~/containers/motion-in-ocean
-```
-
-### Configure environment variables
-
-Create a `.env` file with your desired configuration:
-
-```bash
-cp .env.example .env
-nano .env  # Edit as needed
-```
-
-Or create `.env` manually with your preferred settings:
-
-```bash
-cat > .env << 'EOF'
-RESOLUTION=640x480
-FPS=30
-EDGE_DETECTION=false
-TZ=Europe/London
-EOF
-```
-
-**Configuration options:**
-
-* `RESOLUTION` - Camera resolution (e.g., `640x480`, `1280x720`, `1920x1080`). Maximum `4096x4096`.
-* `FPS` - Frame rate limit. `0` uses camera default. Maximum recommended: `120`.
-* `EDGE_DETECTION` - Set to `true` to enable Canny edge detection (adds CPU overhead).
-* `TZ` - Timezone for logging timestamps (e.g., `America/New_York`, `Asia/Tokyo`).
-* `MOCK_CAMERA` - Set to `true` to disable Picamera2 initialization and generate dummy frames. Useful for development and testing on non-Raspberry Pi systems or when no camera is attached.
-
-### docker-compose.yml example
-
-```yaml
-services:
-  motion-in-ocean:
-    image: ghcr.io/<your-org-or-user>/motion-in-ocean:latest
-    build: . # Build from local Dockerfile for custom configurations or local development
-    platform: linux/arm64 # Specify target platform for Raspberry Pi
-    container_name: motion-in-ocean
-    restart: unless-stopped
-
-    ports:
-      - "127.0.0.1:8000:8000"  # Accessible only on localhost for security
-
-    devices:
-      # These device mappings are for camera access.
-      # Device indices vary significantly by Pi model - run ./detect-devices.sh to identify your hardware.
-      # /dev/dma_heap: Memory management for libcamera (required)
-      # /dev/vchiq: VideoCore Host Interface for camera ISP (required)
-      # /dev/media*: Media controller devices for libcamera camera enumeration (required)
-      # /dev/video*: Camera device nodes (indices vary: Pi 3A uses 0,10-16,18,20-23,31)
-      - /dev/dma_heap:/dev/dma_heap
-      - /dev/vchiq:/dev/vchiq
-      - /dev/media0:/dev/media0
-      - /dev/media1:/dev/media1
-      - /dev/media2:/dev/media2
-      - /dev/media3:/dev/media3
-      - /dev/video0:/dev/video0
-      - /dev/video10:/dev/video10
-      - /dev/video11:/dev/video11
-      - /dev/video12:/dev/video12
-      - /dev/video13:/dev/video13
-      - /dev/video14:/dev/video14
-      - /dev/video15:/dev/video15
-      - /dev/video16:/dev/video16
-      - /dev/video18:/dev/video18
-      - /dev/video20:/dev/video20
-      - /dev/video21:/dev/video21
-      - /dev/video22:/dev/video22
-      - /dev/video23:/dev/video23
-      - /dev/video31:/dev/video31
-
-    env_file:
-      - .env  # See .env.example for configuration options
-
-    volumes:
-      - /run/udev:/run/udev:ro
-
-    deploy:
-      resources:
-        limits:
-          memory: 512M  # Appropriate for Raspberry Pi 4
-          cpus: '1.0'
-        reservations:
-          memory: 256M
-          cpus: '0.5'
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-```
-
-**Network access notes:**
-
-* The service binds to `0.0.0.0:8000` and is accessible on your local network
-* For localhost-only access, change port mapping to `"127.0.0.1:8000:8000"`
-* **Security:** Do not expose port 8000 to the internet without authentication
-* Consider using a reverse proxy (nginx, Caddy) with authentication for remote access
-
-Start it:
-
-```bash
-docker compose up -d
-docker logs -f motion-in-ocean
-```
-
----
-
-## Image publishing & releases (GHCR)
-
-motion-in-ocean is designed so users can deploy without local builds.
-
-### Release tags
-
-* `latest` – most recent build
-* `vX.Y.Z` – pinned releases
-
-### CI/CD expectations
-
-The repo has future intent, to include a GitHub Actions workflow that:
-
-* builds the Docker image
-* pushes to GHCR
-* publishes ARM64 images by default
+These settings prioritise **reliability** over strict hardening, which is reasonable for a homelab VLAN — but should not be exposed to the public internet.
 
 ---
 
 ## Healthchecks
 
-The container exposes two health endpoints:
+The container exposes two endpoints:
 
-* `/health` - Basic liveness check (returns 200 if service is running)
-* `/ready` - Readiness check (returns 200 only if camera is initialized and streaming)
+* `/health` - Liveness (returns 200 if service is running)
+* `/ready` - Readiness (returns 200 only if camera is initialised and streaming)
 
-The docker-compose configuration includes a healthcheck that monitors the `/health` endpoint. Container status will show as "healthy" or "unhealthy" in `docker ps` output.
-
-To manually check health status:
-
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/ready
-```
+The docker-compose healthcheck monitors `/health`.
 
 ---
 
-## Security notes
+## Security Notes
 
 This container requires access to host camera devices.
 
-The recommended approach uses:
+Recommended approach uses:
 
-* Explicit `devices:` mappings (not privileged mode)
+* explicit `devices:` mappings (not privileged mode)
 * `/run/udev` mount (read-only)
+* bind to localhost unless you *explicitly* need LAN access
 
-**Important security considerations:**
+### Network recommendations
 
-* The service binds to all network interfaces (`0.0.0.0:8000`) for homelab access
-* Suitable for trusted home networks behind a firewall
-* **Do not** expose directly to the internet without authentication
-* Consider using a reverse proxy with authentication for remote access
-* The container runs with minimal privileges and only requires camera device access
+* ✅ safest: `127.0.0.1:8000:8000`
+* ⚠ LAN access: `8000:8000` (trusted networks only)
+* ❌ avoid: internet exposure without authentication
 
-For maximum security on localhost-only setups, change the port binding in docker-compose.yml to:
-```yaml
-ports:
-  - "127.0.0.1:8000:8000"
-```
+If you need remote access, use a reverse proxy (nginx/Caddy/Traefik) with authentication.
 
 ---
 
-# AI Agent Onboarding Guide
+## Technology Stack Verification (2026)
 
-This section is aimed at AI coding agents or contributors.
+This project uses the **official modern Raspberry Pi camera stack**:
 
-## Goals for the fork
+* **libcamera**
+* **python3-libcamera**
+* **Picamera2**
+* **Debian Bookworm**
+* **Python 3.11+**
+* **libcap-dev** (required for python-prctl)
 
-The fork exists to “productize” the original proof-of-concept:
+### Deprecated stack (not supported)
 
-1. Convert from `build:` compose workflows to publishable container images (`image:`)
-2. Support homelab deployment patterns:
+* ❌ picamera (v1.x)
+* ❌ raspistill/raspivid
+* ❌ MMAL
 
-   * env files
-   * logging rotation
-   * healthchecks
-3. Improve reliability on ARM64 Pi camera setups
-4. Keep the stack lightweight and easy to reason about
-
----
-
-## Code structure (expected)
-
-Typical layout:
-
-```
-.
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── main.py / app.py (stream server)
-└── .github/workflows/docker-publish.yml
-```
-
----
-
-## Development workflow
-
-For local iteration:
+### Verification
 
 ```bash
-docker compose build
-docker compose up
+rpicam-hello --version   # Should work on Bookworm
+raspistill --help        # Command not found on Bookworm
 ```
 
-For release:
+**References**
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
----
-
-## Suggested improvements backlog
-
-Areas for future enhancements:
-
-### ✅ Completed
-
-* ✅ Add health endpoint (`/health` and `/ready`)
-* ✅ Add structured logging  
-* ✅ Better config via env vars with validation
-* ✅ Configurable resolution and FPS
-* ✅ Document minimal required permissions
-* ✅ Add resource limits for Raspberry Pi deployment
-* ✅ Reduce CPU usage via `pre_callback` for edge detection
-
-### 🔄 Future Work
-
-#### Performance
-
-* Optional hardware encoding support (H.264/H.265)
-* Reduce latency for real-time applications
-* Multi-camera support (CAMERA_INDEX env var)
-
-#### Usability
-
-* Provide "OctoPrint consumption" example
-* Provide "Home Assistant camera integration" example
-* Provide Homepage + Uptime Kuma config snippets
-* Add Prometheus metrics export for monitoring
-* Add basic authentication option
+* Picamera2 Manual (PDF): [https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf)
+* Camera Software Docs: [https://www.raspberrypi.com/documentation/computers/camera_software.html](https://www.raspberrypi.com/documentation/computers/camera_software.html)
+* libcamera Project: [https://libcamera.org/](https://libcamera.org/)
 
 ---
 
-## Assumptions
+## CI / CD
 
-* Primary deployment target is Raspberry Pi 4/5 running ARM64
-* Service runs on private network only (home VLAN)
-* Docker image tags should remain simple (`latest` supported)
+The intention of this fork is to support a proper GHCR workflow:
+
+* build Docker image
+* publish to GHCR
+* multi-arch builds (arm64 + optionally amd64)
+* release tagging (`latest`, `vX.Y.Z`)
+
+> ✅ The repo is ready for a `.github/workflows/docker-publish.yml`.
 
 ---
 
-## Support / debugging commands
+## Contributing
 
-Useful commands:
+Contributions are welcome — even small ones like documentation tweaks.
+
+Suggested contribution areas:
+
+* Pi device mapping detection improvements
+* Compose examples for common homelab consumers (OctoPrint, Home Assistant)
+* CI workflow for GHCR publish
+* Prometheus metrics export
+
+If you’d like to contribute:
+
+1. Fork the repo
+2. Create a feature branch
+3. Open a PR
+
+> A `CONTRIBUTING.md` + Issue templates are planned as next steps.
+
+---
+
+## Roadmap
+
+Near-term:
+
+* [ ] GitHub Actions workflow for multi-arch builds to GHCR
+* [ ] Release tagging + Changelog
+* [ ] Issue templates + PR template
+* [ ] Home Assistant / OctoPrint examples
+* [ ] Improve device mapping auto-detection tooling
+
+---
+
+## Support / Debugging
+
+Common commands:
 
 ```bash
 docker compose ps
 docker compose logs -f
-docker exec -it motion-in-ocean bash
+docker exec -it motion-in-ocean sh
+
 ls -l /dev/video*
 ls -l /dev/dma_heap
 ```
 
+If something doesn’t work, open an issue and include:
+
+* Pi model + OS version (Bookworm?)
+* camera module type
+* compose file snippet (devices/volumes)
+* container logs
+* output of `/health` and `/ready`
+
+---
+
+## License
+
+This project should include a LICENSE file.
+
+Until then: treat it as “all rights reserved”.
+
+---
+
+## Acknowledgements
+
+This repo is a fork of `hyzhak/pi-camera-in-docker`, with a focus on making the concept more production-ready for homelab use.
