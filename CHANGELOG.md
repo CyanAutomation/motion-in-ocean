@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-01-20
+
+- Remove motion-in-ocean-logs.txt due to obsolete log data
+- Update Dockerfile to include flask-cors and enhance create-release.sh for changelog generation
+- Enhance configuration and installation scripts; improve camera streaming logic
+
 ## [0.6.2] - 2026-01-20
 
 ### Changed
