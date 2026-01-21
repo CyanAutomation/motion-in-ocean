@@ -5,7 +5,7 @@
 Flask==3.0.3
 
 # CORS support for Flask
-flask-cors==5.0.0
+flask-cors==6.0.0
 
 # Camera support for Raspberry Pi
 # Note: picamera2 requires system packages (python3-libcamera, libcamera-dev)
