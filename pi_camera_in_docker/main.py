@@ -26,22 +26,33 @@ logger = logging.getLogger(__name__)
 # picamera2 imports DrmPreview which requires pykms, but we don't use preview functionality
 try:
     from picamera2 import Picamera2
-except ModuleNotFoundError as e:
-    if "pykms" in str(e) or "kms" in str(e):
+except (ModuleNotFoundError, AttributeError) as e:
+    if "pykms" in str(e) or "kms" in str(e) or "PixelFormat" in str(e):
         # Mock the pykms module so picamera2 can import without DRM/KMS support
         import sys
         import types
 
-        # Create mock modules
+        # Create mock modules with required attributes
         pykms_mock = types.ModuleType("pykms")
         kms_mock = types.ModuleType("kms")
+        
+        # Add PixelFormat mock class with common pixel formats
+        # DrmPreview expects these attributes even though we don't use them
+        class PixelFormatMock:
+            RGB888 = "RGB888"
+            XRGB8888 = "XRGB8888"
+            BGR888 = "BGR888"
+            XBGR8888 = "XBGR8888"
+        
+        pykms_mock.PixelFormat = PixelFormatMock
+        kms_mock.PixelFormat = PixelFormatMock
 
         # Add to sys.modules to satisfy imports
         sys.modules["pykms"] = pykms_mock
         sys.modules["kms"] = kms_mock
 
         logger.warning(
-            "pykms module not available - using mock module. "
+            "pykms module not available or incomplete - using mock module. "
             "DrmPreview functionality disabled (not needed for headless streaming)."
         )
 

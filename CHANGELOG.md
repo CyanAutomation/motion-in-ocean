@@ -5,6 +5,15 @@ All notable changes to motion-in-ocean will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-01-21
+
+### Fixed
+- Fixed `AttributeError: module 'kms' has no attribute 'PixelFormat'` crash when incomplete pykms package is installed
+- Enhanced pykms workaround to catch both `ModuleNotFoundError` and `AttributeError`
+- Added `PixelFormat` mock class with common pixel format attributes (RGB888, XRGB8888, BGR888, XBGR8888)
+- Removed pykms installation from Dockerfile since DrmPreview functionality is not used in headless streaming mode
+- Updated test coverage to verify both missing and incomplete pykms scenarios
+
 ## [1.0.1] - 2026-01-19
 
 ### Fixed

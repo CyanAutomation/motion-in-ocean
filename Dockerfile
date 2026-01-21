@@ -33,13 +33,13 @@ RUN apt-get update && \
         libcap-dev \
         libcamera-dev \
         python3-libcamera && \
-    # Try to install pykms package (may not be available on all Pi OS versions)
-    (apt-get install -y --no-install-recommends python3-kms || \
-     apt-get install -y --no-install-recommends python3-pykms || \
-     echo "Warning: python3-kms/python3-pykms not available, will use fallback") && \
+    # Clean up
     apt-get clean && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
+
+# Note: pykms/python3-kms not installed as DrmPreview functionality is not used
+# in headless streaming mode. Mock modules in main.py handle picamera2 import.
 
 # Set the working directory
 WORKDIR /app
