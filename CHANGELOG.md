@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed pykms installation from Dockerfile since DrmPreview functionality is not used in headless streaming mode
 - Updated test coverage to verify both missing and incomplete pykms scenarios
 
+### Changed
+- Implemented multi-stage Docker build to reduce final image size by 80-150MB
+- Moved build dependencies (gcc, python3-dev) to builder stage only
+- Removed unused pytest-mock package from requirements-dev.txt
+- Added missing PyYAML dependency to requirements-dev.txt (used by test files)
+
+### Removed
+- Removed unused pytest-mock==3.14.0 dependency (zero usage in codebase)
+- Removed gcc and python3-dev from runtime Docker image (moved to builder stage)
+
 ## [1.0.1] - 2026-01-19
 
 ### Fixed
