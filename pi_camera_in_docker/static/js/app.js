@@ -400,9 +400,11 @@ class CameraStreamApp {
         this.retryAttempts = 0; // Reset for next scheduled update
       }
     } finally {
+      // Clear fallback timeout if it was set
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
+      // Note: AbortSignal.timeout() handles its own cleanup automatically
     }
   }
   
