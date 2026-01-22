@@ -297,7 +297,7 @@ def gen() -> Iterator[bytes]:
                 logger.info("Recording not started; ending MJPEG stream.")
                 break
             with output.condition:
-                output.condition.wait(timeout=1.0)
+                output.condition.wait(timeout=5.0)
                 frame = output.frame
             # Skip if frame is not yet available
             if frame is None:
