@@ -14,6 +14,7 @@ import numpy as np
 from flask import Flask, Response, jsonify, render_template
 from flask_cors import CORS
 
+
 # Optional opencv import - only needed for edge detection feature
 try:
     import cv2

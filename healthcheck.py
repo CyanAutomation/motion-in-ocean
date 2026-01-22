@@ -8,6 +8,7 @@ import sys
 import urllib.error
 import urllib.request
 
+
 def check_health():
     """Check if the application is healthy."""
     try:
