@@ -307,7 +307,9 @@ class CameraStreamApp {
    */
   async updateStats() {
     if (this.statsInFlight) return;
-    this.statsInFlight = true;
+    
+    try {
+      this.statsInFlight = true;
 
     const timeoutMs = 5000;
     let timeoutId;
