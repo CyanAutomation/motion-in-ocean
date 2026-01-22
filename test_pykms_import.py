@@ -118,5 +118,5 @@ except ImportError as e:
     logger.warning("Workaround logic verified as correct.")
     sys.exit(0)
 except Exception as e:
-    logger.exception("❌ FAIL: Unexpected error in Test 2: %s", e)
+    logger.error("❌ FAIL: Unexpected error in Test 2: %s", e)
     sys.exit(1)

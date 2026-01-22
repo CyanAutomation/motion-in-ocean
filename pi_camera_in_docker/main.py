@@ -10,6 +10,10 @@ from datetime import datetime
 from threading import Condition, Event, Thread
 from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
+from flask import Flask, Response, jsonify, render_template
+from flask_cors import CORS
+
 # Optional opencv import - only needed for edge detection feature
 try:
     import cv2
@@ -17,10 +21,6 @@ try:
 except ImportError:
     OPENCV_AVAILABLE = False
     cv2 = None  # type: ignore
-
-import numpy as np
-from flask import Flask, Response, jsonify, render_template
-from flask_cors import CORS
 
 
 # Configure structured logging early

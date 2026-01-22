@@ -3,6 +3,7 @@
 Docker healthcheck script.
 Checks if the Flask application is responding on port 8000.
 """
+
 import sys
 import urllib.error
 import urllib.request
