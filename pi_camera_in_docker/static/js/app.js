@@ -19,6 +19,11 @@ class CameraStreamApp {
     this.baseDelay = 1000; // 1 second base delay
     this.maxDelay = 30000; // 30 seconds max delay
     this.retryTimeout = null;
+
+    // Stream retry/backoff configuration
+    this.streamRetryAttempts = 0;
+    this.streamRetryTimeout = null;
+    this.streamBaseDelay = 2000; // 2 seconds base delay for stream reloads
     
     // DOM elements
     this.elements = {
@@ -229,6 +234,7 @@ class CameraStreamApp {
   onStreamLoad() {
     this.setConnectionStatus('connected', 'Connected');
     this.hideLoading();
+    this.clearStreamRetry();
   }
   
   /**
@@ -237,6 +243,7 @@ class CameraStreamApp {
   onStreamError() {
     this.setConnectionStatus('disconnected', 'Disconnected');
     console.error('Video stream error');
+    this.scheduleStreamRetry();
   }
   
   /**
@@ -295,11 +302,44 @@ class CameraStreamApp {
   /**
    * Calculate exponential backoff delay
    */
-  calculateBackoffDelay() {
-    const exponentialDelay = this.baseDelay * Math.pow(2, this.retryAttempts);
+  calculateBackoffDelay(attempts = this.retryAttempts, baseDelay = this.baseDelay) {
+    const exponentialDelay = baseDelay * Math.pow(2, attempts);
     // Add jitter (random delay up to 20% of the base delay)
-    const jitter = Math.random() * this.baseDelay * 0.2;
+    const jitter = Math.random() * baseDelay * 0.2;
     return Math.min(exponentialDelay + jitter, this.maxDelay);
+  }
+
+  /**
+   * Schedule a stream refresh with exponential backoff
+   */
+  scheduleStreamRetry() {
+    if (this.streamRetryTimeout) return;
+
+    if (this.streamRetryAttempts >= this.maxRetries) {
+      console.warn('Max stream retry attempts reached. Waiting for manual refresh.');
+      this.streamRetryAttempts = 0;
+      return;
+    }
+
+    this.streamRetryAttempts += 1;
+    const delay = this.calculateBackoffDelay(this.streamRetryAttempts, this.streamBaseDelay);
+    console.log(`Retrying stream in ${(delay / 1000).toFixed(1)}s (attempt ${this.streamRetryAttempts}/${this.maxRetries})`);
+
+    this.streamRetryTimeout = setTimeout(() => {
+      this.streamRetryTimeout = null;
+      this.refreshStream();
+    }, delay);
+  }
+
+  /**
+   * Clear scheduled stream retry
+   */
+  clearStreamRetry() {
+    if (this.streamRetryTimeout) {
+      clearTimeout(this.streamRetryTimeout);
+      this.streamRetryTimeout = null;
+    }
+    this.streamRetryAttempts = 0;
   }
   
   /**
