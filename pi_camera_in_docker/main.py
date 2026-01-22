@@ -312,7 +312,17 @@ def video_feed() -> Response:
     """Stream MJPEG video feed."""
     if not recording_started.is_set():
         return Response("Camera stream not ready.", status=503)
-    return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(
+        gen(),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
+        headers=headers,
+    )
 
 
 if __name__ == "__main__":
