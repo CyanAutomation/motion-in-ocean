@@ -301,9 +301,6 @@ def gen() -> Iterator[bytes]:
                 frame = output.frame
             # Skip if frame is not yet available
             if frame is None:
-                if not recording_started.is_set():
-                    logger.info("Recording stopped; ending MJPEG stream.")
-                    break
                 continue
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
     except Exception as e:
