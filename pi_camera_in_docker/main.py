@@ -37,6 +37,7 @@ edge_detection_str: str = os.environ.get("EDGE_DETECTION", "false")
 fps_str: str = os.environ.get("FPS", "0")  # 0 = use camera default
 mock_camera_str: str = os.environ.get("MOCK_CAMERA", "false")
 jpeg_quality_str: str = os.environ.get("JPEG_QUALITY", "100")
+cors_origins_str: Optional[str] = os.environ.get("CORS_ORIGINS")
 
 mock_camera: bool = mock_camera_str.lower() in ("true", "1", "t")
 logger.info(f"Mock camera enabled: {mock_camera}")
@@ -158,6 +159,16 @@ except (ValueError, TypeError):
     logger.warning("Invalid JPEG_QUALITY format. Using default 100.")
     jpeg_quality = 100
 
+# Parse CORS origins (comma-separated). Default to wildcard only if not set.
+if cors_origins_str is None:
+    cors_origins = ["*"]
+else:
+    cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+    if not cors_origins:
+        logger.warning(
+            "CORS_ORIGINS was set but empty. No origins will be allowed for CORS."
+        )
+
 
 def apply_edge_detection(request: Any) -> None:
     """Apply edge detection filter to camera frame.
@@ -244,7 +255,7 @@ app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex
 app.config["DEBUG"] = False
 
 # Enable CORS for cross-origin access (dashboards, Home Assistant, etc.)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": cors_origins}})
 
 output = StreamingOutput()
 app.start_time = datetime.now()
