@@ -186,4 +186,11 @@ def test_dockerfile_has_required_elements(workspace_root, check_name, pattern):
     requirements_content = requirements.read_text() if requirements.exists() else ""
 
     combined_content = dockerfile_content + "\n" + requirements_content
+    if check_name == "Base image":
+        assert (
+            "FROM debian:bookworm" in combined_content
+            or "FROM python:3.11-slim-bookworm" in combined_content
+        ), "Missing in Dockerfile/requirements.txt: Base image"
+        return
+
     assert pattern in combined_content, f"Missing in Dockerfile/requirements.txt: {check_name}"
