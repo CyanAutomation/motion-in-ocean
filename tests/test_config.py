@@ -169,7 +169,7 @@ def test_env_file_has_required_variables(workspace_root, env_var):
 @pytest.mark.parametrize(
     "check_name,pattern",
     [
-        ("Base image", "FROM debian:bookworm"),
+        ("Base image", ("FROM debian:bookworm", "FROM python:3.11-slim-bookworm")),
         ("Python picamera2", "picamera2"),  # Can be in requirements.txt or Dockerfile
         ("Python flask", "python3-flask"),
         ("Python opencv", "python3-opencv"),
@@ -186,11 +186,10 @@ def test_dockerfile_has_required_elements(workspace_root, check_name, pattern):
     requirements_content = requirements.read_text() if requirements.exists() else ""
 
     combined_content = dockerfile_content + "\n" + requirements_content
-    if check_name == "Base image":
-        assert (
-            "FROM debian:bookworm" in combined_content
-            or "FROM python:3.11-slim-bookworm" in combined_content
-        ), "Missing in Dockerfile/requirements.txt: Base image"
+    if isinstance(pattern, tuple):
+        assert any(item in combined_content for item in pattern), (
+            "Missing in Dockerfile/requirements.txt: " + check_name
+        )
         return
 
     assert pattern in combined_content, f"Missing in Dockerfile/requirements.txt: {check_name}"
