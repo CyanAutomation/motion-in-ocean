@@ -250,8 +250,21 @@ class CameraStreamApp {
    * Check connection status
    */
   async checkConnection() {
+    const timeoutMs = 5000;
+    let timeoutId;
+    let controller;
+    let signal;
+
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      signal = AbortSignal.timeout(timeoutMs);
+    } else {
+      controller = new AbortController();
+      signal = controller.signal;
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    }
+
     try {
-      const response = await fetch('/health');
+      const response = await fetch('/health', { signal });
       if (response.ok) {
         this.setConnectionStatus('connected', 'Connected');
       } else {
@@ -259,6 +272,13 @@ class CameraStreamApp {
       }
     } catch {
       this.setConnectionStatus('disconnected', 'Disconnected');
+    } finally {
+      // Clear fallback timeout if it was set
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      // Note: AbortSignal.timeout() handles its own cleanup automatically
+      // and cannot be manually cancelled once created
     }
   }
   
