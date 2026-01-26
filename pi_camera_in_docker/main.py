@@ -3,6 +3,7 @@
 import io
 import logging
 import os
+import threading
 import time
 from collections import deque
 from collections.abc import Iterator
@@ -130,6 +131,7 @@ logger.info(f"Edge detection: {edge_detection}")
 EDGE_DETECTION_ERROR_LOG_INTERVAL_SECONDS = 10.0
 _edge_detection_error_log_last_time = 0.0
 _edge_detection_error_suppressed_count = 0
+_edge_detection_error_lock = threading.Lock()
 
 # Parse max frame age for readiness
 max_frame_age_seconds: float = 10.0  # Initialize with default value
@@ -203,15 +205,9 @@ def apply_edge_detection(request: Any) -> None:
             # Copy the result back to the mapped array
             np.copyto(m.array, edges_bgr)
     except Exception as e:
-        _edge_detection_error_suppressed_count += 1
         now = time.time()
-        
-        # Use a lock to prevent race conditions with global variables
-        import threading
-        if not hasattr(apply_edge_detection, '_lock'):
-            apply_edge_detection._lock = threading.Lock()
-        
-        with apply_edge_detection._lock:
+        with _edge_detection_error_lock:
+            _edge_detection_error_suppressed_count += 1
             if (
                 now - _edge_detection_error_log_last_time
                 >= EDGE_DETECTION_ERROR_LOG_INTERVAL_SECONDS
