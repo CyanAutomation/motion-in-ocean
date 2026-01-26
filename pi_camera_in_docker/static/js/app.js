@@ -16,14 +16,12 @@ class CameraStreamApp {
     // Retry/backoff configuration
     this.retryAttempts = 0;
     this.maxRetries = 5;
-    this.baseDelay = 1000; // 1 second base delay
-    this.maxDelay = 30000; // 30 seconds max delay
+    this.retryDelayMs = 2000; // Fixed delay between retries
     this.retryTimeout = null;
 
     // Stream retry/backoff configuration
     this.streamRetryAttempts = 0;
     this.streamRetryTimeout = null;
-    this.streamBaseDelay = 2000; // 2 seconds base delay for stream reloads
     
     // DOM elements
     this.elements = {
@@ -326,17 +324,7 @@ class CameraStreamApp {
   }
   
   /**
-   * Calculate exponential backoff delay
-   */
-  calculateBackoffDelay(attempts = this.retryAttempts, baseDelay = this.baseDelay) {
-    const exponentialDelay = baseDelay * Math.pow(2, attempts);
-    // Add jitter (random delay up to 20% of the base delay)
-    const jitter = Math.random() * baseDelay * 0.2;
-    return Math.min(exponentialDelay + jitter, this.maxDelay);
-  }
-
-  /**
-   * Schedule a stream refresh with exponential backoff
+   * Schedule a stream refresh with a fixed delay
    */
   scheduleStreamRetry() {
     if (this.streamRetryTimeout) return;
@@ -347,7 +335,7 @@ class CameraStreamApp {
     }
 
     this.streamRetryAttempts += 1;
-    const delay = this.calculateBackoffDelay(this.streamRetryAttempts, this.streamBaseDelay);
+    const delay = this.retryDelayMs;
     console.log(`Retrying stream in ${(delay / 1000).toFixed(1)}s (attempt ${this.streamRetryAttempts}/${this.maxRetries})`);
 
     this.streamRetryTimeout = setTimeout(() => {
@@ -485,10 +473,10 @@ class CameraStreamApp {
         this.elements.maxFrameAgeValue.textContent = '--';
       }
       
-      // Implement exponential backoff retry
+      // Implement fixed delay retry
       if (this.retryAttempts < this.maxRetries) {
         this.retryAttempts++;
-        const delay = this.calculateBackoffDelay();
+        const delay = this.retryDelayMs;
         console.log(`Retrying in ${(delay / 1000).toFixed(1)}s (attempt ${this.retryAttempts}/${this.maxRetries})`);
         
         // Schedule retry
