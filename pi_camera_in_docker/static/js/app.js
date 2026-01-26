@@ -94,7 +94,7 @@ function attachHandlers() {
       stopStatsUpdate();
     } else {
       startStatsUpdate();
-      updateStats();
+      updateStats().catch(error => console.error('Stats update failed:', error));
     }
   });
 }
