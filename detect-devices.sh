@@ -118,27 +118,6 @@ echo "  - 'c 81:* rmw'   # /dev/video*"
 echo "  - 'c 250:* rmw'  # /dev/media* (media controllers)"
 echo ""
 
-generate_docker_compose_override() {
-    cat << EOF
-version: '3.8'
-services:
-  motion-in-ocean:
-    devices:
-EOF
-    for device in "${CORE_DEVICES[@]}"; do
-        echo "      - $device:$device"
-    done
-    for device in "${MEDIA_DEVICES[@]}"; do
-        echo "      - $device:$device"
-    done
-    for device in "${VIDEO_DEVICES[@]}"; do
-        echo "      - $device:$device"
-    done
-    cat << EOF
-    privileged: true # Required for full device access
-EOF
-}
-
 # Check camera functionality
 echo "🎥 Camera Test:"
 echo ""
@@ -165,7 +144,24 @@ echo -e "Do you want to create a docker-compose.override.yml file with the detec
 read -r CREATE_OVERRIDE
 
 if [[ "${CREATE_OVERRIDE}" =~ ^[Yy]$ ]]; then
-    generate_docker_compose_override > docker-compose.override.yml
+    cat << EOF > docker-compose.override.yml
+version: '3.8'
+services:
+  motion-in-ocean:
+    devices:
+EOF
+    for device in "${CORE_DEVICES[@]}"; do
+        echo "      - $device:$device" >> docker-compose.override.yml
+    done
+    for device in "${MEDIA_DEVICES[@]}"; do
+        echo "      - $device:$device" >> docker-compose.override.yml
+    done
+    for device in "${VIDEO_DEVICES[@]}"; do
+        echo "      - $device:$device" >> docker-compose.override.yml
+    done
+    cat << EOF >> docker-compose.override.yml
+    privileged: true # Required for full device access
+EOF
     echo -e "✓ Created docker-compose.override.yml with detected devices."
     echo "You can now run: docker compose -f docker-compose.yml -f docker-compose.override.yml up -d"
 else
