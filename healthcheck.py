@@ -12,6 +12,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 
 
 DEFAULT_HEALTHCHECK_URL = "http://127.0.0.1:8000/health"
@@ -33,7 +34,15 @@ def check_health():
     """Check if the application is healthy."""
     healthcheck_url = os.getenv("HEALTHCHECK_URL", DEFAULT_HEALTHCHECK_URL)
     # Validate URL to prevent SSRF attacks
-    if not (healthcheck_url.startswith("") or healthcheck_url.startswith("")):
+    parsed_url = urlparse(healthcheck_url)
+    if (parsed_url.scheme not in {"http", "https"} or 
+        parsed_url.hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"} or
+        (parsed_url.hostname and (
+            parsed_url.hostname.startswith("10.") or
+            parsed_url.hostname.startswith("192.168.") or
+            parsed_url.hostname.startswith("172.") and 
+            16 <= int(parsed_url.hostname.split(".")[1]) <= 31
+        ))):
         print(f"Warning: Invalid HEALTHCHECK_URL '{healthcheck_url}', using default", file=sys.stderr)
         healthcheck_url = DEFAULT_HEALTHCHECK_URL
     timeout_seconds = _load_timeout()
