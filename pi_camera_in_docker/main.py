@@ -4,7 +4,6 @@ import io
 import logging
 import os
 import signal
-import threading
 import time
 from collections import deque
 from collections.abc import Iterator
@@ -128,12 +127,6 @@ else:
 
 logger.info(f"Edge detection: {edge_detection}")
 
-# Edge detection error logging rate limit (seconds).
-EDGE_DETECTION_ERROR_LOG_INTERVAL_SECONDS = 10.0
-_edge_detection_error_log_last_time = 0.0
-_edge_detection_error_suppressed_count = 0
-_edge_detection_error_lock = threading.Lock()
-
 # Parse max frame age for readiness
 max_frame_age_seconds: float = 10.0  # Initialize with default value
 try:
@@ -193,8 +186,6 @@ def apply_edge_detection(request: Any) -> None:
     Args:
         request: Camera frame request from picamera2
     """
-    global _edge_detection_error_log_last_time
-    global _edge_detection_error_suppressed_count
     try:
         with MappedArray(request, "main") as m:
             # Convert to grayscale
@@ -205,26 +196,8 @@ def apply_edge_detection(request: Any) -> None:
             edges_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
             # Copy the result back to the mapped array
             np.copyto(m.array, edges_bgr)
-    except Exception as e:
-        now = time.time()
-        with _edge_detection_error_lock:
-            _edge_detection_error_suppressed_count += 1
-            if (
-                now - _edge_detection_error_log_last_time
-                >= EDGE_DETECTION_ERROR_LOG_INTERVAL_SECONDS
-            ):
-                suppressed = _edge_detection_error_suppressed_count - 1
-                if suppressed > 0:
-                    logger.error(
-                        "Edge detection processing failed (plus %s suppressed errors): %s",
-                        suppressed,
-                        e,
-                        exc_info=True,
-                    )
-                else:
-                    logger.error("Edge detection processing failed: %s", e, exc_info=True)
-                _edge_detection_error_log_last_time = now
-                _edge_detection_error_suppressed_count = 0
+    except Exception:
+        logger.error("Edge detection processing failed.", exc_info=True)
 
 
 class StreamingOutput(io.BufferedIOBase):
