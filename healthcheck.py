@@ -58,7 +58,7 @@ def _is_allowed_url(url):
         return False
 
     normalized_hostname = hostname.strip(".").lower()
-    if normalized_hostname in {"localhost"}:
+    if normalized_hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
         return False
 
     try:
