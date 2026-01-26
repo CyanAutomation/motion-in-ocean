@@ -305,34 +305,26 @@ class CameraStreamApp {
    */
   async fetchMetrics() {
     const timeoutMs = 5000;
-    let timeoutId;
-    let controller;
-    let signal;
-
-    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-      signal = AbortSignal.timeout(timeoutMs);
-    } else {
-      controller = new AbortController();
-      signal = controller.signal;
-      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    }
-
-    try {
-      const response = await fetch('/metrics', {
-        signal
+    const raceWithTimeout = (promise, timeout) => {
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Request timed out'));
+        }, timeout);
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } finally {
-      if (timeoutId) {
+      return Promise.race([promise, timeoutPromise]).finally(() => {
         clearTimeout(timeoutId);
-      }
-      // Note: AbortSignal.timeout() handles its own cleanup automatically
+      });
+    };
+
+    const response = await raceWithTimeout(fetch('/metrics'), timeoutMs);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    return await response.json();
   }
 
   /**
