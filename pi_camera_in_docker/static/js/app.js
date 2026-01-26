@@ -228,6 +228,7 @@ class CameraStreamApp {
    */
   onStreamLoad() {
     this.hideLoading();
+    this.setConnectionStatus('connected', 'Stream Connected');
   }
   
   /**
@@ -235,6 +236,7 @@ class CameraStreamApp {
    */
   onStreamError() {
     console.error('Video stream error');
+    this.setConnectionStatus('disconnected', 'Stream Error');
   }
   
   /**
