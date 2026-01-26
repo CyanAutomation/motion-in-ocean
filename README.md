@@ -60,7 +60,7 @@ services:
       - /run/udev:/run/udev:ro
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "/app/healthcheck.py"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -243,7 +243,11 @@ The container exposes two endpoints:
 * `/health` - Liveness (returns 200 if service is running)
 * `/ready` - Readiness (returns 200 only if camera is initialised and streaming)
 
-The docker-compose healthcheck monitors `/health`.
+The docker-compose healthcheck uses the bundled `healthcheck.py`, which defaults to `/health`.
+Override it with:
+
+* `HEALTHCHECK_URL` (e.g., `http://127.0.0.1:8000/ready`)
+* `HEALTHCHECK_TIMEOUT` (seconds, default `5`)
 
 ---
 
