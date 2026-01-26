@@ -200,15 +200,57 @@ def apply_edge_detection(request: Any) -> None:
         logger.error("Edge detection processing failed.", exc_info=True)
 
 
-class StreamingOutput(io.BufferedIOBase):
-    """Thread-safe output handler for camera frames."""
+class StreamStats:
+    """Track streaming statistics separate from frame buffering."""
 
     def __init__(self) -> None:
+        self._lock = Condition()
+        self._frame_count: int = 0
+        self._last_frame_time: Optional[float] = None
+        self._frame_times: deque[float] = deque(maxlen=30)
+
+    def record_frame(self, timestamp: float) -> None:
+        """Record a new frame timestamp."""
+        with self._lock:
+            self._frame_count += 1
+            self._last_frame_time = timestamp
+            self._frame_times.append(timestamp)
+
+    def get_fps(self) -> float:
+        """Calculate actual FPS from frame times."""
+        with self._lock:
+            frame_times = list(self._frame_times)
+        if len(frame_times) < 2:
+            return 0.0
+        time_span = frame_times[-1] - frame_times[0]
+        if time_span == 0:
+            return 0.0
+        return (len(frame_times) - 1) / time_span
+
+    def snapshot(self) -> Tuple[int, Optional[float], float]:
+        """Return a snapshot of frame count, last frame time, and FPS."""
+        with self._lock:
+            frame_count = self._frame_count
+            last_frame_time = self._last_frame_time
+            frame_times = list(self._frame_times)
+        
+        # Calculate FPS outside lock using the snapshot
+        if len(frame_times) < 2:
+            current_fps = 0.0
+        else:
+            time_span = frame_times[-1] - frame_times[0]
+            current_fps = 0.0 if time_span == 0 else (len(frame_times) - 1) / time_span
+        
+        return frame_count, last_frame_time, current_fps
+
+
+class FrameBuffer(io.BufferedIOBase):
+    """Thread-safe output handler for camera frames."""
+
+    def __init__(self, stats: StreamStats) -> None:
         self.frame: Optional[bytes] = None
         self.condition: Condition = Condition()
-        self.frame_count: int = 0
-        self.last_frame_time: Optional[float] = None
-        self.frame_times: deque[float] = deque(maxlen=30)  # Fixed-size deque prevents memory leak
+        self._stats = stats
 
     def write(self, buf: bytes) -> int:
         """Write a new frame to the output buffer.
@@ -218,49 +260,25 @@ class StreamingOutput(io.BufferedIOBase):
         """
         with self.condition:
             self.frame = buf
-            self.frame_count += 1
-            # Track frame timing for FPS calculation
             now = time.time()
-            self.last_frame_time = now
-            self.frame_times.append(now)  # deque automatically maintains maxlen=30
+            self._stats.record_frame(now)
             self.condition.notify_all()
         return len(buf)
 
-    def get_fps(self) -> float:
-        """Calculate actual FPS from frame times.
 
-        Returns:
-            Current frames per second, or 0.0 if insufficient data
-        """
-        with self.condition:
-            frame_times = list(self.frame_times)
-        if len(frame_times) < 2:
-            return 0.0
-        time_span = frame_times[-1] - frame_times[0]
-        if time_span == 0:
-            return 0.0
-        return (len(frame_times) - 1) / time_span
-
-    def get_status(self) -> Dict[str, Any]:
-        """Return current streaming status.
-
-        Returns:
-            Dictionary containing streaming statistics
-        """
-        with self.condition:
-            frame_count = self.frame_count
-            last_frame_time = self.last_frame_time
-        last_frame_age_seconds = (
-            None if last_frame_time is None else round(time.time() - last_frame_time, 2)
-        )
-        current_fps = self.get_fps()
-        return {
-            "frames_captured": frame_count,
-            "current_fps": round(current_fps, 2),
-            "resolution": resolution,
-            "edge_detection": edge_detection,
-            "last_frame_age_seconds": last_frame_age_seconds,
-        }
+def get_stream_status(stats: StreamStats) -> Dict[str, Any]:
+    """Return current streaming status with configuration details."""
+    frame_count, last_frame_time, current_fps = stats.snapshot()
+    last_frame_age_seconds = (
+        None if last_frame_time is None else round(time.time() - last_frame_time, 2)
+    )
+    return {
+        "frames_captured": frame_count,
+        "current_fps": round(current_fps, 2),
+        "resolution": resolution,
+        "edge_detection": edge_detection,
+        "last_frame_age_seconds": last_frame_age_seconds,
+    }
 
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -282,7 +300,8 @@ def add_no_cache_headers(response: Response) -> Response:
         response.headers["Pragma"] = "no-cache"
     return response
 
-output = StreamingOutput()
+stream_stats = StreamStats()
+output = FrameBuffer(stream_stats)
 app.start_time = datetime.now()
 picam2_instance: Optional[Any] = None  # Picamera2 instance (Optional since it may not be available)
 recording_started = Event()  # Thread-safe flag to track if camera recording has started
@@ -321,7 +340,7 @@ def health() -> Tuple[Response, int]:
 @app.route("/ready")
 def ready() -> Tuple[Response, int]:
     """Readiness probe - checks if camera is actually streaming."""
-    status = output.get_status()
+    status = get_stream_status(stream_stats)
     now = datetime.now()
     base_payload = {
         "timestamp": now.isoformat(),
@@ -369,7 +388,7 @@ def ready() -> Tuple[Response, int]:
 def metrics() -> Tuple[Response, int]:
     """Metrics endpoint - returns camera metrics in JSON format for monitoring."""
     uptime = (datetime.now() - app.start_time).total_seconds()
-    status = output.get_status()
+    status = get_stream_status(stream_stats)
 
     return jsonify(
         {
