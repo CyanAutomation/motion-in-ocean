@@ -252,7 +252,7 @@ function startStatsUpdate() {
   if (state.updateInterval) return;
 
   state.updateInterval = setInterval(() => {
-    updateStats();
+    updateStats().catch(error => console.error('Stats update failed:', error));
   }, state.updateFrequency);
 }
 
