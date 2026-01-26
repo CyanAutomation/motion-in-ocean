@@ -16,7 +16,7 @@ class CameraStreamApp {
     // Retry/backoff configuration
     this.retryAttempts = 0;
     this.maxRetries = 5;
-    this.retryDelayMs = 2000; // Fixed delay between retries
+    this.retryAttempts = 0;
     this.retryTimeout = null;
 
     // DOM elements
