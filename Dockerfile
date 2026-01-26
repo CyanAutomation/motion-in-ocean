@@ -1,6 +1,6 @@
 # ---- Builder Stage ----
 # This stage is responsible for adding the Raspberry Pi repository and building Python packages.
-# Using python:3.11-slim-bookworm provides optimized Python with pip pre-installed
+# Using python:3.14-slim-bookworm provides optimized Python with pip pre-installed
 FROM python:3.14-slim-bookworm AS builder
 
 # Build argument to control opencv-python-headless installation
@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     fi
 
 # ---- Final Stage ----
-# The final image is based on python:3.11-slim-bookworm (optimized Python runtime, ~40MB smaller than debian:bookworm-slim + python3)
+# The final image is based on python:3.14-slim-bookworm (optimized Python runtime, ~40MB smaller than debian:bookworm-slim + python3)
 FROM python:3.14-slim-bookworm
 
 # Copy Raspberry Pi repository and keys from builder
@@ -54,7 +54,7 @@ COPY --from=builder /etc/apt/sources.list.d/raspi.list /etc/apt/sources.list.d/r
 # Note: opencv removed from apt (python3-opencv was 250MB), now installed via pip as opencv-python-headless (40MB)
 # Note: python3-flask removed (duplicate - installed via pip), libcap-dev and libcamera-dev removed (dev libraries not needed in runtime)
 # Note: curl removed (replaced with Python-based healthcheck script)
-# Note: python3-pip not needed (included in python:3.11-slim-bookworm base image)
+# Note: python3-pip not needed (included in python:3.14-slim-bookworm base image)
 # Using BuildKit cache mounts to speed up rebuilds
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -71,7 +71,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 WORKDIR /app
 
 # Copy Python packages from builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 
 # Copy the application code
 COPY pi_camera_in_docker /app
