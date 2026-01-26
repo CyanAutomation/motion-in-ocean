@@ -11,7 +11,6 @@ Optional environment variables:
 import os
 import sys
 import ipaddress
-import socket
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
@@ -37,16 +36,14 @@ def _is_public_address(address):
         ip = ipaddress.ip_address(address)
     except ValueError:
         return False
-    # Check if address is global and not in private ranges
-    return ip.is_global and not ip.is_private and not ip.is_loopback and not ip.is_link_local
-
-
-def _resolve_hostnames(hostname):
-    try:
-        addrinfo = socket.getaddrinfo(hostname, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
-    except socket.gaierror:
-        return []
-    return [info[4][0] for info in addrinfo]
+    return (
+        ip.is_global
+        and not ip.is_private
+        and not ip.is_loopback
+        and not ip.is_link_local
+        and not ip.is_multicast
+        and not ip.is_reserved
+    )
 
 
 def _is_allowed_url(url):
@@ -68,16 +65,16 @@ def _is_allowed_url(url):
         literal_address = None
 
     if literal_address:
-        return literal_address.is_global
+        return _is_public_address(str(literal_address))
 
     # Validate hostname format without DNS resolution to prevent TOCTOU attacks
-    if not all(c.isalnum() or c in '.-' for c in hostname):
+    if not all(c.isalnum() or c in ".-" for c in hostname):
         return False
-    
+
     # Block common internal hostnames
     if normalized_hostname in {"localhost", "metadata.google.internal", "169.254.169.254"}:
         return False
-    
+
     return True
 
 
