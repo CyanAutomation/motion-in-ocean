@@ -35,56 +35,42 @@ def _is_public_address(address):
     )
 
 
-def _is_allowed_url(url):
-    parsed_url = urlparse(url)
-    if parsed_url.scheme not in {"http", "https"}:
-        return False
-
-    hostname = parsed_url.hostname
-    if not hostname:
-        return False
-
-    normalized_hostname = hostname.strip(".").lower()
-    if normalized_hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
-        return False
-
-    try:
-        literal_address = ipaddress.ip_address(hostname)
-    except ValueError:
-        literal_address = None
-
-    if literal_address:
-        return _is_public_address(str(literal_address))
-
-    # Validate hostname format without DNS resolution to prevent TOCTOU attacks
-    if not all(c.isalnum() or c in ".-" for c in hostname):
-        return False
-
-    # Block common internal hostnames
-    if normalized_hostname in {"localhost", "metadata.google.internal", "169.254.169.254"}:
-        return False
-
-    return True
-
-
 def check_health():
     """Check if the application is healthy."""
     env_healthcheck_url = os.getenv("HEALTHCHECK_URL")
     healthcheck_url = env_healthcheck_url or DEFAULT_HEALTHCHECK_URL
-    if env_healthcheck_url and not _is_allowed_url(env_healthcheck_url):
-        print(
-            f"Warning: Invalid HEALTHCHECK_URL '{env_healthcheck_url}', using default",
-            file=sys.stderr,
+    if env_healthcheck_url:
+        parsed_url = urlparse(env_healthcheck_url)
+        hostname = parsed_url.hostname
+        normalized_hostname = hostname.strip(".").lower() if hostname else ""
+        literal_address = None
+        if hostname:
+            try:
+                literal_address = ipaddress.ip_address(hostname)
+            except ValueError:
+                literal_address = None
+            # Validate hostname format without DNS resolution to prevent TOCTOU attacks
+            if not all(c.isalnum() or c in ".-" for c in hostname):
+                literal_address = "invalid"  # Force validation failure
+        if (
+            parsed_url.scheme not in {"http", "https"}
+            or not hostname
+            or normalized_hostname
+            in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal", "169.254.169.254"}
+            in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal", "169.254.169.254"}
+            or (literal_address and (literal_address == "invalid" or not _is_public_address(str(literal_address))))
+        ):
+            print(
+                f"Warning: Invalid HEALTHCHECK_URL '{env_healthcheck_url}', using default",
+                file=sys.stderr,
+            )
+            healthcheck_url = DEFAULT_HEALTHCHECK_URL
+    try:
+        timeout_seconds = float(
+            os.getenv("HEALTHCHECK_TIMEOUT") or DEFAULT_HEALTHCHECK_TIMEOUT
         )
-        healthcheck_url = DEFAULT_HEALTHCHECK_URL
-    timeout_value = os.getenv("HEALTHCHECK_TIMEOUT")
-    if not timeout_value:
+    except ValueError:
         timeout_seconds = DEFAULT_HEALTHCHECK_TIMEOUT
-    else:
-        try:
-            timeout_seconds = float(timeout_value)
-        except ValueError:
-            timeout_seconds = DEFAULT_HEALTHCHECK_TIMEOUT
     try:
         with urllib.request.urlopen(healthcheck_url, timeout=timeout_seconds) as response:
             if response.status == 200:
