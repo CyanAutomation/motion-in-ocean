@@ -3,6 +3,8 @@
 import io
 import logging
 import os
+import signal
+import sys
 import threading
 import time
 from collections import deque
@@ -317,6 +319,23 @@ output = StreamingOutput()
 app.start_time = datetime.now()
 picam2_instance: Optional[Any] = None  # Picamera2 instance (Optional since it may not be available)
 recording_started = Event()  # Thread-safe flag to track if camera recording has started
+shutdown_event = Event()
+
+
+def handle_shutdown(signum: int, frame: Optional[object]) -> None:
+    """Handle SIGTERM/SIGINT for graceful shutdown."""
+    logger.info(f"Received signal {signum}; shutting down.")
+    recording_started.clear()
+    shutdown_event.set()
+    if picam2_instance is not None:
+        try:
+            if picam2_instance.started:
+                logger.info("Stopping camera recording due to shutdown signal...")
+                picam2_instance.stop_recording()
+                logger.info("Camera recording stopped")
+        except Exception as e:
+            logger.error(f"Error during camera shutdown: {e}", exc_info=True)
+    raise SystemExit(0)
 
 
 @app.route("/")
@@ -441,6 +460,8 @@ def video_feed() -> Response:
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
     picam2_instance = None
     if mock_camera:
         logger.info(
@@ -477,7 +498,7 @@ if __name__ == "__main__":
             """Generate mock camera frames for testing."""
             # Mark as started for mock mode using thread-safe Event
             recording_started.set()
-            while True:
+            while not shutdown_event.is_set():
                 time.sleep(1 / (fps if fps > 0 else 10))  # Simulate FPS
                 output.write(dummy_image_jpeg)
 
