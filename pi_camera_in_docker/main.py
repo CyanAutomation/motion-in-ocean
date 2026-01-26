@@ -205,22 +205,29 @@ def apply_edge_detection(request: Any) -> None:
     except Exception as e:
         _edge_detection_error_suppressed_count += 1
         now = time.time()
-        if (
-            now - _edge_detection_error_log_last_time
-            >= EDGE_DETECTION_ERROR_LOG_INTERVAL_SECONDS
-        ):
-            suppressed = _edge_detection_error_suppressed_count - 1
-            if suppressed > 0:
-                logger.error(
-                    "Edge detection processing failed (plus %s suppressed errors): %s",
-                    suppressed,
-                    e,
-                    exc_info=True,
-                )
-            else:
-                logger.error("Edge detection processing failed: %s", e, exc_info=True)
-            _edge_detection_error_log_last_time = now
-            _edge_detection_error_suppressed_count = 0
+        
+        # Use a lock to prevent race conditions with global variables
+        import threading
+        if not hasattr(apply_edge_detection, '_lock'):
+            apply_edge_detection._lock = threading.Lock()
+        
+        with apply_edge_detection._lock:
+            if (
+                now - _edge_detection_error_log_last_time
+                >= EDGE_DETECTION_ERROR_LOG_INTERVAL_SECONDS
+            ):
+                suppressed = _edge_detection_error_suppressed_count - 1
+                if suppressed > 0:
+                    logger.error(
+                        "Edge detection processing failed (plus %s suppressed errors): %s",
+                        suppressed,
+                        e,
+                        exc_info=True,
+                    )
+                else:
+                    logger.error("Edge detection processing failed: %s", e, exc_info=True)
+                _edge_detection_error_log_last_time = now
+                _edge_detection_error_suppressed_count = 0
 
 
 class StreamingOutput(io.BufferedIOBase):
