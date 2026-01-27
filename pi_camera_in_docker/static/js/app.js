@@ -102,6 +102,10 @@ function attachHandlers() {
  * Fetch and update stats from /metrics endpoint
  */
 async function updateStats() {
+  if (state.statsInFlight) return;
+  
+  try {
+    state.statsInFlight = true;
   try {
     const data = await fetchMetrics();
     renderMetrics(data);
