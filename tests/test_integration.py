@@ -75,10 +75,10 @@ def test_health_endpoints_present(workspace_root, endpoint, markers):
 @pytest.mark.parametrize(
     "metric,marker",
     [
-        ("Frame count tracking", "self.frame_count += 1"),
+        ("Frame count tracking", "self._frame_count += 1"),
         ("FPS calculation", "def get_fps"),
-        ("Frame timing", "self.frame_times"),
-        ("Status endpoint", "def get_status"),
+        ("Frame timing", "self._frame_times_monotonic"),
+        ("Status endpoint", "def get_stream_status"),
         ("Uptime tracking", "app.start_time"),
     ],
 )
