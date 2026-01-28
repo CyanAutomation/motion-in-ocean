@@ -127,3 +127,23 @@ def test_udev_mount_read_only(workspace_root):
 
     # Check for read-only udev mount
     assert "/run/udev" in content, "udev mount not found"
+
+
+def test_camera_detection_error_handling(workspace_root):
+    """Verify camera detection error handling is present."""
+    main_py = workspace_root / "pi_camera_in_docker" / "main.py"
+    code = main_py.read_text()
+
+    # Verify camera detection check is present
+    assert "global_camera_info()" in code, "Camera detection check missing"
+
+    # Verify empty camera list handling
+    assert "if not camera_info:" in code, "Empty camera list check missing"
+
+    # Verify IndexError handling
+    assert "except IndexError" in code, "IndexError handler missing"
+
+    # Verify helpful error messages
+    assert "No cameras detected" in code, "Missing camera detection error message"
+    assert "device mappings" in code, "Missing device mapping guidance"
+    assert "detect-devices.sh" in code, "Missing detect-devices.sh reference"

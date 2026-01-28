@@ -138,10 +138,10 @@ try:
     parts = resolution_str.split("x")
     if len(parts) != 2:
         raise ValueError(f"Invalid resolution format: expected WIDTHxHEIGHT, got '{resolution_str}'")
-    
+
     width = int(parts[0])
     height = int(parts[1])
-    
+
     # Validate resolution dimensions
     if width <= 0 or height <= 0:
         logger.warning(f"Invalid RESOLUTION dimensions {width}x{height}. Using default 640x480.")
@@ -282,14 +282,14 @@ class StreamStats:
             frame_count = self._frame_count
             last_frame_time = self._last_frame_monotonic
             frame_times = list(self._frame_times_monotonic)
-        
+
         # Calculate FPS outside lock using the snapshot
         if len(frame_times) < 2:
             current_fps = 0.0
         else:
             time_span = frame_times[-1] - frame_times[0]
             current_fps = 0.0 if time_span == 0 else (len(frame_times) - 1) / time_span
-        
+
         return frame_count, last_frame_time, current_fps
 
 
@@ -344,7 +344,7 @@ if secret_key is None:
     # This is a reasonable default for internal networks without authentication
     import socket
     hostname = socket.gethostname()
-    secret_key = f"motion-in-ocean-{hostname}".encode('utf-8').hex()
+    secret_key = f"motion-in-ocean-{hostname}".encode().hex()
     logger.warning(
         "FLASK_SECRET_KEY not set. Using hostname-based key. "
         "Set FLASK_SECRET_KEY environment variable for production deployments with sessions."
@@ -382,7 +382,7 @@ def handle_shutdown(signum: int, frame: Optional[object]) -> None:
     logger.info(f"Received signal {signum}; shutting down.")
     recording_started.clear()
     shutdown_event.set()
-    
+
     with picam2_lock:
         global picam2_instance
         if picam2_instance is not None:
@@ -478,26 +478,26 @@ def gen() -> Iterator[bytes]:
         MJPEG frame data with multipart boundaries
     """
     global active_stream_connections
-    
+
     # Track connection - increment counter
     with stream_connection_lock:
         active_stream_connections += 1
         current_connections = active_stream_connections
     logger.info(f"Stream client connected. Active connections: {current_connections}")
-    
+
     consecutive_timeouts = 0
     max_consecutive_timeouts = 3  # Exit after 3 consecutive timeouts (15 seconds)
-    
+
     try:
         while True:
             if not recording_started.is_set():
                 logger.info("Recording not started; ending MJPEG stream.")
                 break
-            
+
             with output.condition:
                 notified = output.condition.wait(timeout=5.0)
                 frame = output.frame
-            
+
             # Check if wait timed out (notified=False) vs was notified (notified=True)
             if not notified:
                 consecutive_timeouts += 1
@@ -510,7 +510,7 @@ def gen() -> Iterator[bytes]:
             else:
                 # Reset timeout counter when we get a frame
                 consecutive_timeouts = 0
-            
+
             # Skip if frame is not yet available
             if frame is None:
                 continue
@@ -530,7 +530,7 @@ def video_feed() -> Response:
     """Stream MJPEG video feed."""
     if not recording_started.is_set():
         return Response("Camera stream not ready.", status=503)
-    
+
     # Check connection limit
     with stream_connection_lock:
         if active_stream_connections >= max_stream_connections:
@@ -542,7 +542,7 @@ def video_feed() -> Response:
                 f"Maximum concurrent connections ({max_stream_connections}) reached. Try again later.",
                 status=429
             )
-    
+
     headers = {
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
@@ -619,6 +619,30 @@ if __name__ == "__main__":
     else:
         try:
             logger.info("Initializing Picamera2...")
+
+            # Check if cameras are available before initializing
+            try:
+                camera_info = Picamera2.global_camera_info()
+                if not camera_info:
+                    error_msg = (
+                        "No cameras detected by Picamera2. "
+                        "Ensure the camera is enabled on the host (raspi-config) and "
+                        "proper device mappings are configured in docker-compose.yml. "
+                        "Required devices typically include: /dev/video*, /dev/media*, /dev/vchiq, /dev/dma_heap. "
+                        "Run 'detect-devices.sh' to identify required devices for your hardware."
+                    )
+                    raise RuntimeError(error_msg)
+                logger.info(f"Detected {len(camera_info)} camera(s): {camera_info}")
+            except IndexError as e:
+                # This shouldn't happen with the check above, but handle it defensively
+                error_msg = (
+                    "Camera detection failed with IndexError. "
+                    "No cameras are available to Picamera2. "
+                    "Verify camera hardware is connected and enabled, and that the container has "
+                    "proper device access (--device mappings for /dev/video*, /dev/media*, etc.)."
+                )
+                raise RuntimeError(error_msg) from e
+
             picam2_instance = Picamera2()
 
             logger.info(
