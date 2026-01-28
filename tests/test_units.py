@@ -44,12 +44,21 @@ def test_flask_routes():
 
 
 def test_dockerfile_has_flask(workspace_root):
-    """Verify Flask is declared in Dockerfile."""
+    """Verify Flask is declared in Dockerfile or requirements."""
     dockerfile_path = workspace_root / "Dockerfile"
+    requirements_path = workspace_root / "requirements.txt"
     assert dockerfile_path.exists(), "Dockerfile not found"
+    assert requirements_path.exists(), "requirements.txt not found"
 
-    content = dockerfile_path.read_text()
-    assert "python3-flask" in content, "Flask not found in Dockerfile dependencies"
+    dockerfile_content = dockerfile_path.read_text().lower()
+    requirements_content = requirements_path.read_text().lower()
+
+    has_pip_install = "pip3 install" in dockerfile_content and "flask" in dockerfile_content.split("pip3 install", 1)[-1].split("\n")[0]
+    has_requirements = "flask" in requirements_content
+
+    assert has_pip_install or has_requirements, (
+        "Flask not found in requirements.txt or Dockerfile pip install"
+    )
 
 
 @pytest.mark.parametrize(
