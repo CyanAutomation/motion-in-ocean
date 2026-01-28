@@ -263,7 +263,7 @@ function onStreamError() {
  * Set connection status
  */
 function setConnectionStatus(status, text) {
-  state.isConnected = status === 'connected';
+  state.isConnected = status === 'connected' || status === 'stale';
 
   if (state.elements.statusIndicator) {
     state.elements.statusIndicator.className = 'status-indicator';
