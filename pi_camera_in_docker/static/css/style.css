@@ -130,6 +130,16 @@ body {
   box-shadow: 0 0 8px var(--success);
 }
 
+.status-indicator.stale {
+  background: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+}
+
+.status-indicator.inactive {
+  background: var(--warning);
+  animation: none;
+}
+
 .status-indicator.disconnected {
   background: var(--error);
   animation: none;

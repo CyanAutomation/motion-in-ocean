@@ -323,9 +323,18 @@ async function fetchMetrics() {
  * Render metrics data in the UI
  */
 function renderMetrics(data) {
-  if (!state.isConnected) {
-    setConnectionStatus('connected', 'Connected');
-  }
+  const cameraActive = data.camera_active !== false;
+  const lastFrameAge = Number(data.last_frame_age_seconds);
+  const maxFrameAge = Number(data.max_frame_age_seconds);
+  const hasFrameAge = Number.isFinite(lastFrameAge);
+  const hasMaxFrameAge = Number.isFinite(maxFrameAge);
+  const isStale = cameraActive && hasFrameAge && hasMaxFrameAge && lastFrameAge > maxFrameAge;
+  const statusText = cameraActive
+    ? (isStale ? 'Stale stream' : 'Connected')
+    : 'Camera inactive';
+  const statusState = cameraActive ? (isStale ? 'stale' : 'connected') : 'inactive';
+
+  setConnectionStatus(statusState, statusText);
 
   if (state.elements.fpsValue) {
     state.elements.fpsValue.textContent = data.current_fps
