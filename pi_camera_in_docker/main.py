@@ -48,6 +48,7 @@ if cors_origins_str is None:
 max_frame_age_seconds_str: str = os.environ.get("MAX_FRAME_AGE_SECONDS", "10")
 allow_pykms_mock_str: str = os.environ.get("ALLOW_PYKMS_MOCK", "false")
 max_stream_connections_str: str = os.environ.get("MAX_STREAM_CONNECTIONS", "10")
+max_frame_size_mb_str: str = os.environ.get("MAX_FRAME_SIZE_MB", "")  # Empty = auto-calculate
 
 mock_camera: bool = mock_camera_str.lower() in ("true", "1", "t")
 allow_pykms_mock: bool = allow_pykms_mock_str.lower() in ("true", "1", "t")
@@ -215,6 +216,36 @@ except (ValueError, TypeError):
     logger.warning("Invalid JPEG_QUALITY format. Using default 100.")
     jpeg_quality = 100
 
+# Calculate maximum frame size based on resolution and quality
+# Formula: width * height * 3 (BGR) * compression_ratio (JPEG quality dependent)
+# Higher quality = less compression = larger files
+# Typical JPEG compression ratios: quality 100 ~= 0.3, quality 85 ~= 0.1, quality 50 ~= 0.05
+if max_frame_size_mb_str:
+    try:
+        max_frame_size_mb = float(max_frame_size_mb_str)
+        if max_frame_size_mb <= 0:
+            logger.warning(f"MAX_FRAME_SIZE_MB must be positive ({max_frame_size_mb}). Using auto.")
+            max_frame_size_bytes: Optional[int] = None
+        else:
+            max_frame_size_bytes = int(max_frame_size_mb * 1024 * 1024)
+            logger.info(f"Max frame size set to {max_frame_size_mb} MB ({max_frame_size_bytes} bytes)")
+    except (ValueError, TypeError):
+        logger.warning("Invalid MAX_FRAME_SIZE_MB format. Using auto-calculated limit.")
+        max_frame_size_bytes = None
+else:
+    # Auto-calculate based on resolution and quality
+    # Worst case: uncompressed would be width * height * 3 bytes
+    # JPEG at quality 100 typically achieves 30-40% compression
+    # Use 50% as conservative estimate for max size
+    width, height = resolution
+    uncompressed_size = width * height * 3
+    compression_factor = 0.5 if jpeg_quality >= 90 else 0.3 if jpeg_quality >= 70 else 0.2
+    max_frame_size_bytes = int(uncompressed_size * compression_factor)
+    logger.info(
+        f"Auto-calculated max frame size: {max_frame_size_bytes / (1024 * 1024):.2f} MB "
+        f"(resolution: {width}x{height}, quality: {jpeg_quality})"
+    )
+
 # Parse CORS origins (comma-separated). Default to wildcard only if not set.
 if cors_origins_str is None:
     cors_origins = ["*"]
@@ -253,7 +284,7 @@ class StreamStats:
     """Track streaming statistics separate from frame buffering."""
 
     def __init__(self) -> None:
-        self._lock = Condition()
+        self._lock = Lock()
         self._frame_count: int = 0
         self._last_frame_monotonic: Optional[float] = None
         self._frame_times_monotonic: deque[float] = deque(maxlen=30)
@@ -296,23 +327,47 @@ class StreamStats:
 class FrameBuffer(io.BufferedIOBase):
     """Thread-safe output handler for camera frames."""
 
-    def __init__(self, stats: StreamStats) -> None:
+    def __init__(self, stats: StreamStats, max_frame_size: Optional[int] = None) -> None:
         self.frame: Optional[bytes] = None
         self.condition: Condition = Condition()
         self._stats = stats
+        self._max_frame_size = max_frame_size
+        self._dropped_frames = 0
 
     def write(self, buf: bytes) -> int:
         """Write a new frame to the output buffer.
 
         Args:
             buf: JPEG-encoded frame data
+
+        Returns:
+            Number of bytes written
+
+        Raises:
+            ValueError: If frame size exceeds maximum allowed size
         """
+        frame_size = len(buf)
+
+        # Validate frame size to prevent memory exhaustion
+        if self._max_frame_size is not None and frame_size > self._max_frame_size:
+            self._dropped_frames += 1
+            logger.warning(
+                f"Dropped frame: size {frame_size} bytes exceeds maximum {self._max_frame_size} bytes "
+                f"(total dropped: {self._dropped_frames})"
+            )
+            # Return the size to satisfy encoder interface, but don't store the frame
+            return frame_size
+
         with self.condition:
             self.frame = buf
             monotonic_now = time.monotonic()
             self._stats.record_frame(monotonic_now)
             self.condition.notify_all()
-        return len(buf)
+        return frame_size
+
+    def get_dropped_frames(self) -> int:
+        """Return the number of dropped frames due to size limits."""
+        return self._dropped_frames
 
 
 def get_stream_status(stats: StreamStats) -> Dict[str, Any]:
@@ -365,8 +420,8 @@ def add_no_cache_headers(response: Response) -> Response:
     return response
 
 stream_stats = StreamStats()
-output = FrameBuffer(stream_stats)
-app.start_time = datetime.now()
+output = FrameBuffer(stream_stats, max_frame_size=max_frame_size_bytes)
+app.start_time_monotonic = time.monotonic()  # Use monotonic clock for uptime calculations
 picam2_instance: Optional[Any] = None  # Picamera2 instance (Optional since it may not be available)
 picam2_lock = Lock()  # Lock for thread-safe access to picam2_instance
 recording_started = Event()  # Thread-safe flag to track if camera recording has started
@@ -378,10 +433,16 @@ stream_connection_lock = Lock()
 
 
 def handle_shutdown(signum: int, frame: Optional[object]) -> None:
-    """Handle SIGTERM/SIGINT for graceful shutdown."""
-    logger.info(f"Received signal {signum}; shutting down.")
+    """Handle SIGTERM/SIGINT for graceful shutdown.
+    
+    Signal handlers should only set atomic flags to avoid deadlocks.
+    Actual cleanup is performed in the main thread.
+    """
+    logger.info(f"Received signal {signum}; setting shutdown flags.")
+    # Only set atomic flags - don't perform cleanup in signal handler
     recording_started.clear()
     shutdown_event.set()
+    # Exit to trigger cleanup in main thread's finally block
 
     with picam2_lock:
         global picam2_instance
@@ -413,10 +474,11 @@ def ready() -> Tuple[Response, int]:
     """Readiness probe - checks if camera is actually streaming."""
     status = get_stream_status(stream_stats)
     now = datetime.now()
+    uptime_seconds = time.monotonic() - app.start_time_monotonic
     is_recording = recording_started.is_set()
     base_payload = {
         "timestamp": now.isoformat(),
-        "uptime_seconds": (now - app.start_time).total_seconds(),
+        "uptime_seconds": uptime_seconds,
         "max_frame_age_seconds": max_frame_age_seconds,
         **status,
     }
@@ -453,7 +515,7 @@ def ready() -> Tuple[Response, int]:
 @app.route("/metrics")
 def metrics() -> Tuple[Response, int]:
     """Metrics endpoint - returns camera metrics in JSON format for monitoring."""
-    uptime = (datetime.now() - app.start_time).total_seconds()
+    uptime = time.monotonic() - app.start_time_monotonic
     status = get_stream_status(stream_stats)
 
     return jsonify(
@@ -490,6 +552,11 @@ def gen() -> Iterator[bytes]:
 
     try:
         while True:
+            # Check for shutdown signal
+            if shutdown_event.is_set():
+                logger.info("Shutdown event set; ending MJPEG stream.")
+                break
+
             if not recording_started.is_set():
                 logger.info("Recording not started; ending MJPEG stream.")
                 break
@@ -612,7 +679,12 @@ if __name__ == "__main__":
             shutdown_event.set()
             mock_thread.join(timeout=5.0)
             if mock_thread.is_alive():
-                logger.warning("Mock thread did not stop within 5 seconds")
+                logger.error(
+                    "Mock thread did not stop within 5 seconds timeout. "
+                    "Thread will be abandoned (daemon threads are terminated on exit)."
+                )
+                # Force daemon mode to ensure it doesn't block shutdown
+                mock_thread.daemon = True
             recording_started.clear()
             logger.info("Mock camera shutdown complete")
 
