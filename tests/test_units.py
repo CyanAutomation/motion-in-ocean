@@ -183,3 +183,31 @@ def test_logging_configuration():
     logger.info("Test info message")
     logger.warning("Test warning message")
     logger.error("Test error message")
+
+
+def test_healthcheck_url_validation_allows_valid_hostname(monkeypatch):
+    """Ensure valid HEALTHCHECK_URL hostnames pass validation."""
+    import healthcheck
+    import urllib.request
+
+    captured = {}
+
+    class DummyResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(url, timeout):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        return DummyResponse()
+
+    monkeypatch.setenv("HEALTHCHECK_URL", "https://example.com/health")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    assert healthcheck.check_health() is True
+    assert captured["url"] == "https://example.com/health"
