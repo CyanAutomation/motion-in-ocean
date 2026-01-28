@@ -136,7 +136,7 @@ body {
 }
 
 .status-indicator.inactive {
-  background: var(--warning);
+  background: var(--error);
   animation: none;
 }
 
