@@ -47,9 +47,8 @@ def check_health():
         "on",
     }
     healthcheck_path = "/ready" if healthcheck_ready else DEFAULT_HEALTHCHECK_PATH
-    healthcheck_url = (
-        env_healthcheck_url or f"{DEFAULT_HEALTHCHECK_HOST}{healthcheck_path}"
-    )
+    default_healthcheck_url = f"{DEFAULT_HEALTHCHECK_HOST}{healthcheck_path}"
+    healthcheck_url = env_healthcheck_url or default_healthcheck_url
     if env_healthcheck_url:
         parsed_url = urlparse(env_healthcheck_url)
         hostname = parsed_url.hostname
@@ -81,7 +80,7 @@ def check_health():
                 f"Warning: Invalid HEALTHCHECK_URL '{env_healthcheck_url}', using default",
                 file=sys.stderr,
             )
-            healthcheck_url = f"{DEFAULT_HEALTHCHECK_HOST}{healthcheck_path}"
+            healthcheck_url = default_healthcheck_url
     try:
         timeout_seconds = float(
             os.getenv("HEALTHCHECK_TIMEOUT") or DEFAULT_HEALTHCHECK_TIMEOUT
