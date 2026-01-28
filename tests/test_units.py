@@ -201,10 +201,10 @@ def test_healthcheck_url_validation_allows_valid_hostname(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def fake_urlopen(url, timeout):
-        captured["url"] = url
-        captured["timeout"] = timeout
-        return DummyResponse()
+def fake_urlopen(url, timeout=None):
+    captured["url"] = url
+    captured["timeout"] = timeout
+    return DummyResponse()
 
     monkeypatch.setenv("HEALTHCHECK_URL", "https://example.com/health")
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
