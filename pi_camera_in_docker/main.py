@@ -94,7 +94,17 @@ if not mock_camera:
                 "picamera2 import failed due to missing/incomplete DRM/KMS support. "
                 "Install pykms or set ALLOW_PYKMS_MOCK=true to allow a mock module."
             ) from e
-    from picamera2.array import MappedArray
+    try:
+        from picamera2.array import MappedArray
+    except ModuleNotFoundError:
+        try:
+            from picamera2 import MappedArray  # type: ignore[attr-defined]
+        except (ModuleNotFoundError, AttributeError) as e:
+            raise ImportError(
+                "picamera2 MappedArray import failed. The installed picamera2 package "
+                "is missing the array module or MappedArray export. "
+                "Install a newer picamera2 build (python3-picamera2) that includes it."
+            ) from e
     from picamera2.encoders import JpegEncoder
     from picamera2.outputs import FileOutput
 else:
