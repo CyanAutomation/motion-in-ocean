@@ -393,6 +393,7 @@ def metrics() -> Tuple[Response, int]:
             "frames_captured": status["frames_captured"],
             "current_fps": status["current_fps"],
             "last_frame_age_seconds": status["last_frame_age_seconds"],
+            "max_frame_age_seconds": max_frame_age_seconds,
             "uptime_seconds": round(uptime, 2),
             "resolution": status["resolution"],
             "edge_detection": status["edge_detection"],
